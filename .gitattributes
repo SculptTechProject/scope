@@ -1,0 +1,2 @@
+resources/frida/** -whitespace
+resources/device/licenses/** -whitespace

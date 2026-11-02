@@ -1,0 +1,16 @@
+/node_modules/
+/dist/
+/target/
+/.scope/
+/.runtime/
+*.log
+.DS_Store
+*.tsbuildinfo
+
+
+/resources/bin/*
+
+/src-tauri/gen/
+.venv*/
+__pycache__/
+*.pyc

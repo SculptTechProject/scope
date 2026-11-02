@@ -1,0 +1,3 @@
+# Keep the Python package and the device's frida-server at the same version.
+# This version matches the source repository's recorded integration baseline.
+frida==17.9.1
