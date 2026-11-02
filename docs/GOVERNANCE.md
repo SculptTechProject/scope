@@ -24,7 +24,7 @@ CI also runs on `release/**` pushes: events generated with `GITHUB_TOKEN` do not
 trigger ordinary PR workflows, so the proposal relies on checks from that exact
 branch commit. `require_last_push_approval` is disabled because the maintainer
 pushes the code and must still be able to review the bot-authored PR. Stale
-approvals are dismissed on code changes.
+approvals are dismissed after new commits.
 
 CODEOWNERS is evaluated from the PR's base branch. On the first proposal that
 adds it, the required ordinary approval and the repository's sole write-capable

@@ -1,9 +1,11 @@
 # Recorded verification
 
-## 1.0.0 review branch — 2026-11-02
+## 1.0.0 release preparation — 2026-11-02
 
-Source/package version is `1.0.0` on `release/1.0.0`. This is a review candidate,
-not a published 1.0.0 release. The existing alpha evidence is retained below.
+These checks were recorded on `release/1.0.0` before publication, with source and
+package version `1.0.0`. [GitHub Releases](https://github.com/SculptTechProject/scope/releases)
+records published versions and downloadable artifacts. The earlier alpha evidence
+is retained below as a separate historical baseline.
 
 Checks run during candidate preparation:
 
@@ -20,8 +22,8 @@ Checks run during candidate preparation:
 - Cargo audit's vulnerability list has zero entries; the Linux glib unsoundness
   and two unmaintained-dependency warnings remain documented in DEPENDENCIES.md.
 
-Cross-platform [CI run 41438279706](https://github.com/SculptTechProject/scope/actions/runs/41438279706)
-passed all three jobs at source commit `29d41f4`: Windows 2022 x64, Ubuntu 22.04
+Cross-platform [CI run 41440372077](https://github.com/SculptTechProject/scope/actions/runs/41440372077)
+passed all three jobs at source commit `6448b60`: Windows 2022 x64, Ubuntu 22.04
 x64 and macOS 14 arm64. Each job ran the Rust/frontend/resource/installer tests,
 native packaging and the real-process MCP/capture/persistence smoke. These are
 build and headless-protocol checks, not interactive desktop/device validation on
@@ -48,8 +50,9 @@ Windows or Linux. The final PR head is checked separately by GitHub Actions.
   SQLite persistence, restart isolation and graceful shutdown. Final resources
   exclude optional native Frida files; the complete ad-hoc signature verifies.
 
-No new physical Android or Windows/Linux desktop interaction is implied. No
-1.0.0 tag, merge or publication is performed automatically.
+No new physical Android or Windows/Linux desktop interaction is implied. Native
+branch protection requires maintainer review before merge; the release workflow
+builds an existing tag into a draft and does not publish automatically.
 
 ## Historical alpha baseline
 

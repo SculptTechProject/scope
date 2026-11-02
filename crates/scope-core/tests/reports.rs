@@ -226,7 +226,10 @@ fn observed_openapi_omits_values_and_credentials_and_preserves_structure_and_pro
         "NOT_FOUND_SECRET_354",
         "SESSION_SECRET_432",
     ] {
-        assert!(!text.contains(secret), "Leaked {secret}");
+        assert!(
+            !text.contains(secret),
+            "OpenAPI contained a captured fixture value"
+        );
     }
     assert!(!text.contains("\"example\""));
     assert!(!text.contains("\"examples\""));

@@ -6,9 +6,9 @@ Scope stores captures locally and works without an account. Start with the inclu
 
 1. Download the artifact for your host from [GitHub Releases](https://github.com/SculptTechProject/scope/releases). Read its release notes for architecture, optional Frida resources and signing status.
 2. Compare its SHA-256 with the release checksum file, then extract the archive or run the platform installer.
-3. On macOS, move `Scope.app` to Applications and open it. The first alpha is not notarized with an Apple Developer certificate. If Gatekeeper blocks it, use macOS **System Settings → Privacy & Security → Open Anyway** after verifying the source and checksum. Do not disable Gatekeeper globally.
+3. On macOS, move `Scope.app` to Applications and open it. The 1.0.0 package is ad-hoc signed without Apple notarization. If Gatekeeper blocks it, use macOS **System Settings → Privacy & Security → Open Anyway** after verifying the source and checksum. Do not disable Gatekeeper globally.
 
-The initial public artifact is **macOS arm64** (Apple Silicon). Optional Frida native binaries are not included in this public package; [install them locally](ANDROID.md#frida-runtime) for Frida mode. A build artifact from another platform is not proof that Android interception has been exercised on that platform.
+The interactively tested host is **macOS arm64** (Apple Silicon). Windows x64 and Linux x64 have CI build/headless-protocol coverage; their interactive installers, desktop and device behavior remain unverified. Read the release notes for Linux's known dependency advisory. Optional Frida native binaries are not included in public packages; [install them locally](ANDROID.md#frida-runtime) for Frida mode.
 
 ## Capture local test traffic
 

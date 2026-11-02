@@ -92,4 +92,4 @@ The application settings expose the actual data directory. `--data-dir` or `SCOP
 
 Tests exercise actual local HTTP and CA-signed HTTPS, rather than only proxy parsers. The release smoke launches the actual desktop engine and MCP executable, tests access/redaction, and reopens the same SQLite archive. Native UI and one rooted Android emulator were checked separately. [Recorded results and limits](VERIFICATION.md)
 
-The current alpha does not capture WebSocket frames, HTTP trailers, QUIC/HTTP3 or arbitrary TCP/UDP. Windows/Linux runtime parity and physical Android support need evidence from those environments. New networking-stack support should include a minimal reproducible client/server fixture and a cleanup test.
+Scope 1.0.0 does not capture WebSocket frames, HTTP trailers, QUIC/HTTP3 or arbitrary TCP/UDP. Windows/Linux runtime parity and physical Android support need evidence from those environments. New networking-stack support should include a minimal reproducible client/server fixture and a cleanup test.

@@ -2,7 +2,7 @@
 
 User-visible changes are recorded here. Back up important captures before upgrading.
 
-## 1.0.0 — proposed, not published
+## 1.0.0 — 2026-11-02
 
 - Persistent ordered request/response rewrites, mock responses and blocking, with validated atomic updates and per-request rule snapshots.
 - Applied-rule evidence, upstream/mock/blocked provenance and preserved original messages, including HAR/native roundtrips.

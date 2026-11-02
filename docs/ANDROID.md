@@ -33,7 +33,7 @@ A non-rooted device can use system proxy mode for HTTP. HTTPS then depends on ma
 
 ## Frida runtime
 
-The Rust adapter and resources are designed for multiple hosts; the worker is isolated from the desktop process. **The public v0.1.0-alpha.1 app does not include a standalone Frida worker or Android server.** Install the optional runtime locally before using Frida mode. The integration source and JavaScript profiles are included; ordinary proxy capture does not require Python or Frida.
+The Rust adapter and resources are designed for multiple hosts; the worker is isolated from the desktop process. **Public packages, including 1.0.0, do not include a standalone Frida worker or Android server.** Install the optional runtime locally before using Frida mode. The integration source and JavaScript profiles are included; ordinary proxy capture does not require Python or Frida. Windows/Linux have CI build/headless-protocol coverage; interactive desktop and device behavior on those hosts remain unverified. See [verification boundaries](VERIFICATION.md).
 
 A task-local macOS arm64 bundle with a standalone worker/server was exercised during development. That verifies the optional integration, not the contents of the public download. Worker and device server must use the **same Frida version**.
 
@@ -69,7 +69,7 @@ export SCOPE_PYTHON="$PWD/.venv-frida/bin/python"
 
 On Windows, use `.venv-frida\Scripts\python.exe` and set `SCOPE_PYTHON` to its absolute path before launching Scope.
 
-With no server override, Scope checks the selected device's ABI and uses a matching optional packaged or managed `frida-server-17.9.1-android-*` resource when available. No native server is included in the initial public app; the recommended helper installs it locally. If none is found, Scope connects to an existing default-port USB Frida server and does not stop a server it did not start.
+With no server override, Scope checks the selected device's ABI and uses a matching optional packaged or managed `frida-server-17.9.1-android-*` resource when available. No native server is included in public packages; the recommended helper installs it locally. If none is found, Scope connects to an existing default-port USB Frida server and does not stop a server it did not start.
 
 To have Scope launch a dedicated server, download a matching official binary locally first. This helper **only downloads** and does not alter the device:
 

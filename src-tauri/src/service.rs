@@ -791,8 +791,12 @@ mod tests {
         assert!(created["id"].is_string());
         assert!(!created.to_string().contains("secret"));
         let proxy = app.engine.start_proxy(session.id.clone(), 0).await.unwrap();
-        let capturing = reqwest::Client::builder().no_proxy().proxy(reqwest::Proxy::all(format!("http://127.0.0.1:{}",proxy.port)).unwrap()).build().unwrap();
-        let response = capturing.post("http://example.test/visible?api_key=hidden-query-credential").header("authorization","Bearer hidden-header-credential").header("content-type","application/json").body("{\"token\":\"hidden-body-credential\",\"public\":\"visible-body-evidence\"}").send().await.unwrap();
+        // The mock never contacts example.test; exercise verified TLS through this
+        // temporary engine's CA instead of transmitting fixture credentials over HTTP.
+        let capturing = reqwest::Client::builder().no_proxy().proxy(reqwest::Proxy::all(format!("http://127.0.0.1:{}",proxy.port)).unwrap())
+            .add_root_certificate(reqwest::Certificate::from_pem(&std::fs::read(app.engine.ca_cert_path()).unwrap()).unwrap())
+            .build().unwrap();
+        let response = capturing.post("https://example.test/visible?api_key=hidden-query-credential").header("authorization","Bearer hidden-header-credential").header("content-type","application/json").body("{\"token\":\"hidden-body-credential\",\"public\":\"visible-body-evidence\"}").send().await.unwrap();
         assert_eq!(response.status(),200);let _=response.bytes().await.unwrap();app.engine.stop_proxy().await.unwrap();
         for query in ["hidden-query-credential","hidden-header-credential","hidden-body-credential","secret-name","secret-value"] {
             let results=dispatch_mcp(app.clone(),call("search_requests",json!({"sessionId":session.id,"query":query}))).await.unwrap();assert_eq!(results,json!([]),"Raw credential was searchable: {query}");
