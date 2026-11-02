@@ -9,7 +9,7 @@ Scope is an open-source desktop HTTP(S) debugger with a Rust capture engine, an 
 
 [Download the alpha](https://github.com/SculptTechProject/scope/releases) · [Getting started](docs/GETTING_STARTED.md) · [Android setup](docs/ANDROID.md) · [MCP](docs/MCP.md) · [Roadmap](ROADMAP.md)
 
-![Scope traffic inspector showing a captured local demo request and its response](docs/images/traffic-inspector.png)
+![Scope traffic inspector showing a captured local demo request and its response](docs/images/traffic-inspector.jpg)
 
 > **1.0.0 review branch.** This branch proposes the next release; the published download remains `v0.1.0-alpha.1`. macOS Apple Silicon is the locally verified desktop target. Windows/Linux build checks are separate from runtime/device validation. [Recorded evidence →](docs/VERIFICATION.md) · [Maintainer review rules →](docs/GOVERNANCE.md)
 
@@ -61,7 +61,7 @@ The twelve tools cover connection, session search, evidence, analysis, compariso
 
 Credential redaction applies to MCP output. Ordinary local archives preserve raw traffic; sanitized export is a separate lossy option. Redaction is best-effort. [Configuration, tool reference and privacy boundaries →](docs/MCP.md)
 
-![Scope analysis showing endpoint and error evidence from a local demo capture](docs/images/analysis.png)
+![Scope analysis showing endpoint and error evidence from a local demo capture](docs/images/analysis.jpg)
 
 [More screenshots](docs/SCREENSHOTS.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · [User needs research](docs/USER-NEEDS.md)
 

@@ -12,5 +12,8 @@ export function verifyReleaseCommit(root, tag) {
     throw new Error('The release tag must point to the checked-out commit');
   if (git(['diff', '--exit-code', 'HEAD', '--']).status !== 0)
     throw new Error('Tracked release sources must be clean');
+  const status = git(['status', '--porcelain', '--untracked-files=normal']);
+  if (status.status !== 0 || status.stdout.trim())
+    throw new Error('Release sources must be clean, including untracked files');
   return target.stdout.trim();
 }

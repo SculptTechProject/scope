@@ -25,6 +25,9 @@ test('release assets require an exact existing tag, matching HEAD and clean trac
     assert.throws(() => verifyReleaseCommit(root, 'v1.0.0'), /existing Git tag/);
     git('tag', '-a', 'v1.0.0', '-m', 'reviewed tag');
     assert.equal(verifyReleaseCommit(root, 'v1.0.0'), git('rev-parse', 'HEAD'));
+    writeFileSync(join(root, 'untracked-source.txt'), 'not in the source archive');
+    assert.throws(() => verifyReleaseCommit(root, 'v1.0.0'), /including untracked files/);
+    rmSync(join(root, 'untracked-source.txt'));
     writeFileSync(join(root, 'source.txt'), 'unreviewed edit');
     assert.throws(() => verifyReleaseCommit(root, 'v1.0.0'), /must be clean/);
     git('add', 'source.txt');

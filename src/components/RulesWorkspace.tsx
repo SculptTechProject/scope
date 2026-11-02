@@ -129,7 +129,9 @@ export function RulesWorkspace({ native }: { native: boolean }) {
       <div className="rules-workbench">
         <aside className="rule-library">
           <div className="rule-library-heading">
-            <span>{rules.length} rules</span>
+            <span>
+              {rules.length} {rules.length === 1 ? 'rule' : 'rules'}
+            </span>
             <span>
               <ArrowDownUp size={12} /> Priority order
             </span>

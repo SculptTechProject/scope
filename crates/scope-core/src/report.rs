@@ -166,7 +166,7 @@ impl Engine {
             })
             .collect();
         if !cleartext.is_empty() {
-            insights.push(observation("security",format!("{} cleartext requests carried credential-like fields",cleartext.len()),"Authorization, cookie or credential-like query field names were observed over HTTP. Values are omitted from this finding. Local fixtures can legitimately use HTTP; review the linked evidence.",&cleartext));
+            insights.push(observation("security",format!("{} cleartext request{} carried credential-like fields",cleartext.len(),if cleartext.len()==1 {""} else {"s"}),"Authorization, cookie or credential-like query field names were observed over HTTP. Values are omitted from this finding. Local fixtures can legitimately use HTTP; review the linked evidence.",&cleartext));
         }
         let synthetic: Vec<_> = completed
             .iter()
@@ -174,7 +174,7 @@ impl Engine {
             .filter(|e| e.provenance != TrafficProvenance::Upstream)
             .collect();
         if !synthetic.is_empty() {
-            insights.push(observation("rules",format!("{} responses were generated locally",synthetic.len()),"Mock and block rules produced these responses without contacting the upstream server. These are not observations of upstream behavior.",&synthetic));
+            insights.push(observation("rules",format!("{} response{} generated locally",synthetic.len(),if synthetic.len()==1 {""} else {"s"}),"Mock and block rules produced these responses without contacting the upstream server. These are not observations of upstream behavior.",&synthetic));
         }
         Ok(
             json!({"totalRequests":exchanges.len(),"completedRequests":completed.len(),"inFlightRequests":exchanges.len()-completed.len(),"mockRequests":exchanges.iter().filter(|e|e.provenance==TrafficProvenance::Mock).count(),"blockedRequests":exchanges.iter().filter(|e|e.provenance==TrafficProvenance::Blocked).count(),"upstreamRequests":exchanges.iter().filter(|e|e.provenance==TrafficProvenance::Upstream).count(),"totalErrors":errors.len(),"totalBytes":exchanges.iter().map(|e|e.request_bytes+e.response_bytes).sum::<i64>(),"averageDurationMs":average(&durations),"p95DurationMs":percentile(&durations,0.95),"hosts":hosts.into_iter().map(|(host,count)|json!({"host":host,"count":count})).collect::<Vec<_>>(),"endpoints":endpoints,"statusCodes":codes.into_iter().map(|(status,count)|json!({"status":status,"count":count})).collect::<Vec<_>>(),"insights":insights,"method":"Counts include saved in-flight exchanges. Error counts, timings, status codes and observations use completed exchanges only. Evidence lists are limited to 50 IDs per observation; synthetic responses are identified explicitly."}),
