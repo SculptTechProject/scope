@@ -14,7 +14,7 @@ Checks run during candidate preparation:
   ownership, Scope session IDs versus payload credential names, valid OpenAPI
   schema fields and redacted-search membership isolation.
 - 10 frontend interaction tests passed on Node 22.22.3; TypeScript/Vite built.
-- Strict workspace Clippy, actionlint, two Node release-resource tests and three
+- Strict workspace Clippy, actionlint, three Node release/tag-resource tests and three
   Python installer tests passed. npm audit reports zero vulnerabilities.
 - The macOS arm64 native package built and its complete ad-hoc signature verified.
 - Cargo audit's vulnerability list has zero entries; the Linux glib unsoundness

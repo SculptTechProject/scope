@@ -131,5 +131,9 @@ before publishing any draft assets; the workflow never automatically publishes
 the draft. The currently selected macOS runner architecture is documented by
 [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
+The helper and workflow require an existing `refs/tags/...` reference matching
+the clean checked-out commit. A similarly named branch is rejected; draft
+creation uses `--verify-tag` so GitHub cannot silently tag a different commit.
+
 The helper and workflow do not push commits or create tags. The maintainer remains
 responsible for choosing the reviewed commit/tag and publishing the release.

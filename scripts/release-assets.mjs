@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyPublicResources } from './public-resources.mjs';
+import { verifyReleaseCommit } from './release-ref.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const tag = process.argv[2];
@@ -24,10 +25,7 @@ function run(command, args) {
     throw new Error(`${command} failed: ${result.stderr || result.error || result.stdout}`);
   return result.stdout.trim();
 }
-const commit = run('git', ['rev-parse', 'HEAD']);
-if (run('git', ['rev-list', '-n', '1', tag]) !== commit)
-  throw new Error('The release tag must point to the checked-out commit');
-run('git', ['diff', '--exit-code', 'HEAD', '--']);
+const commit = verifyReleaseCommit(root, tag);
 verifyPublicResources(join(root, '.runtime/public-resources'));
 const platform =
   process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux';

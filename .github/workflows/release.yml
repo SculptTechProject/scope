@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag }}
           persist-credentials: false
       - name: Validate release tag
         run: node -e "if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(process.env.RELEASE_TAG)) process.exit(1)"
@@ -121,7 +121,7 @@ jobs:
             test "$(cat existing-state.txt)" = true || { echo 'Release is already public; review CI artifacts manually.'; exit 1; }
           else
             printf '%s\n' 'Review candidate. Frida is installed separately with the shipped setup helper. Platform builds require runtime review before publication. See docs/RELEASING.md, docs/VERIFICATION.md and docs/DEPENDENCIES.md.' > release-notes.txt
-            gh release create "$RELEASE_TAG" --draft --prerelease --title "Scope $RELEASE_TAG" --notes-file release-notes.txt
+            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease --title "Scope $RELEASE_TAG" --notes-file release-notes.txt
           fi
       - name: Combine checksums and upload draft assets
         shell: bash
