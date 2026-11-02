@@ -56,7 +56,7 @@ For runtime installation, supported hook profiles, non-root limitations and exac
 4. Continue to forward the edited message, or abort to end that transfer.
 5. Inspect **Original** to compare the captured message before the edit.
 
-A breakpoint expires after **60 seconds**, at which point the transfer is aborted. Disable breakpoints before generating the automatic demo batch. **Replay** sends a new outbound request and creates another exchange; it does not replace an earlier response.
+A breakpoint expires after **60 seconds**, at which point the transfer is aborted. Disable breakpoints before generating the automatic demo batch. **Replay** sends a new outbound request directly and creates another exchange; it does not replace an earlier response or trigger the proxy breakpoints. Send traffic through the configured proxy when you want to pause and edit it.
 
 ## Save and move sessions
 

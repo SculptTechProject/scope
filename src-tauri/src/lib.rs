@@ -232,11 +232,16 @@ async fn save_export(app: &AppCore, handle: tauri::AppHandle, args: Value) -> Re
     Ok(json!({"saved":true,"path":path}))
 }
 
+fn app_context() -> tauri::Context<tauri::Wry> {
+    // This macro embeds a macOS Info.plist symbol, so expand it only once.
+    tauri::generate_context!()
+}
+
 pub async fn headless() -> Result<()> {
     // Use the same platform resource layout as the GUI, including relocated
     // .app bundles, Windows installs and Linux AppImages/deb installations.
     // The checkout fallback is only for unbundled Cargo development binaries.
-    let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+    let context = app_context();
     let resources =
         tauri::utils::platform::resource_dir(context.package_info(), &tauri::Env::default())
             .ok()
@@ -281,7 +286,7 @@ pub fn run() {
             app.manage(core);
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(app_context())
         .expect("build Scope desktop")
         .run(|app, event| {
             #[cfg(target_os = "macos")]

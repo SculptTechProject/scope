@@ -8,6 +8,15 @@ All displayed HTTP traffic is synthetic: Scope's built-in local server on `127.0
 | --- | --- |
 | [Traffic inspector](traffic-inspector.png) | Two runs of **Generate test traffic** produced 12 real captured requests. The selected configuration endpoint returns JSON identifying the local test server. |
 | [Analysis](analysis.png) | A separate six-request baseline, with observed endpoint aggregates, one HTTP 401 response and a deliberately slower endpoint. These measurements describe this capture only. |
+| [Response editing](response-breakpoint.png) | An actual proxied localhost response paused before delivery, with HTTP 503 and synthetic maintenance JSON staged in the editor. Continuing delivered the edited JSON to the client; the saved original still contains HTTP 200 and the initial configuration body. |
 | [Android app picker](android-app-picker.png) | A real ADB scan of a rooted Android emulator, showing the installed `com.scope.demo` package. This screenshot shows selection before interception starts and includes the device-wide proxy disclosure. |
 
 To reproduce the traffic views, launch the desktop app, create a session, and select **Generate test traffic**. Open **Analysis** to inspect the same persisted capture. The Android view additionally requires a connected, authorized emulator or device with ADB available.
+
+To reproduce the response editor, leave the generated local fixture and capture running, enable the **Response** breakpoint, and send a separate request through the proxy:
+
+```sh
+curl --noproxy '' --proxy http://127.0.0.1:17890 http://127.0.0.1:17891/api/config
+```
+
+Select **Edit & continue**, change the status and body, and continue the message. This screenshot used a proxied request: replay sends a separate direct outbound request and does not enter the proxy breakpoint path.

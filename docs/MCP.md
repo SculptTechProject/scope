@@ -60,7 +60,7 @@ Try prompts such as:
 
 No sessions are shared automatically. Access is reset on desktop restart. **Allow traffic changes** is off by default and currently permits replay; it does not grant arbitrary shell access or live breakpoint editing.
 
-Replay can change remote state. It reuses the captured request's destination, method, headers and body, including locally stored credentials. Output redaction does not change the outbound request. Enable it only when you intend the agent to resend requests in your test environment.
+Replay can change remote state. It reuses the captured request's destination, method, headers and body, including locally stored credentials. Output redaction does not change the outbound request. It sends directly and does not trigger the proxy breakpoints. Enable it only when you intend the agent to resend requests in your test environment.
 
 For reads, known credential headers, sensitive query parameters and known sensitive JSON keys are redacted. Original request/response snapshots are omitted to avoid a second path around redaction. Non-JSON bodies are omitted; individual JSON body strings larger than 64 KiB are omitted with an explicit marker.
 

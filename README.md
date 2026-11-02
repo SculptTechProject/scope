@@ -17,7 +17,7 @@ Scope is an open-source desktop HTTP(S) debugger with a Rust capture engine, an 
 
 - **Capture HTTP and HTTPS** through a localhost proxy and a generated Scope CA.
 - **Choose an Android app** with ADB discovery, device-wide proxy capture, or selected-process Frida instrumentation with selectable proxy, trust, pinning and root-hiding hooks.
-- **Pause and edit requests or responses**, continue or abort them, and inspect the original alongside the edited message. Replay creates a separate request.
+- **Pause and edit requests or responses**, continue or abort them, and inspect the original alongside the edited message. Replay sends directly and creates a separate request; proxy breakpoints apply to traffic sent through the proxy.
 - **Keep named sessions in SQLite.** Bodies, repeated headers, timing and failures survive app restarts. Import/export HAR or a lossless Scope archive.
 - **Analyze observed traffic:** endpoint counts, errors, sizes, latency percentiles, repeated requests and differences between two sessions.
 - **Connect an MCP client:** search, inspect, analyze and compare explicitly shared sessions. Replay is opt-in.
