@@ -1,5 +1,19 @@
 # Releasing Scope
 
+## 1.0.0 review proposal
+
+Source versions on `release/1.0.0` are `1.0.0`; no 1.0.0 tag or public release
+is created by the proposal. [Governance](GOVERNANCE.md) describes the required
+maintainer review and bot-authored PR, which lets the maintainer use native
+GitHub approval. Dispatch `release.yml` on this branch with `mode: proposal`
+to open that PR. This mode skips all release build/upload jobs.
+
+After review and merge, a maintainer chooses a tag and can dispatch the same
+workflow with `mode: draft` to build it into a draft prerelease. Publication is
+always separate. Do not replace the reviewed alpha assets with an unreviewed
+1.0 build. The remaining sections record the existing public artifact boundary
+and release procedure; the alpha remains available until a new release is approved.
+
 The first public prerelease is `v0.1.0-alpha.1`; the application version remains
 `0.1.0`. Repository: [SculptTechProject/scope](https://github.com/SculptTechProject/scope).
 The manually tested public target is macOS Apple Silicon. Windows/Linux builds
@@ -50,6 +64,7 @@ Use Node **22.22.3**, Rust **1.99.1** and the committed `package-lock.json` and
 npm ci
 cargo fmt --all -- --check
 cargo test --workspace --locked
+npm test -- --run
 node --test scripts/release.test.mjs
 python3 -m unittest discover -s resources/device/tests
 npm audit --audit-level=high
@@ -108,7 +123,7 @@ commit-pinned actions and locked package dependencies. It checks Rust formatting
 workspace tests, the release filter, setup integrity tests, npm security findings
 and native packaging. It uploads build artifacts; it does not publish releases.
 
-`release.yml` is manually dispatched with an existing version tag. It checks and
+`release.yml` in draft mode is manually dispatched with an existing version tag. It checks and
 builds macOS arm64, Windows x64 and Linux x64 packages, creates source/checksum
 assets, then uploads them to a **draft prerelease**. It refuses to modify an
 already public release. A maintainer reviews CI results and platform limitations

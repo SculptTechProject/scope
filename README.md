@@ -11,16 +11,19 @@ Scope is an open-source desktop HTTP(S) debugger with a Rust capture engine, an 
 
 ![Scope traffic inspector showing a captured local demo request and its response](docs/images/traffic-inspector.png)
 
-> **v0.1.0-alpha.1** (app version 0.1.0). macOS on Apple Silicon is the first locally verified desktop target. Windows and Linux have build workflows; runtime and device support on those hosts are still being validated. [What has actually been tested →](docs/VERIFICATION.md)
+> **1.0.0 review branch.** This branch proposes the next release; the published download remains `v0.1.0-alpha.1`. macOS Apple Silicon is the locally verified desktop target. Windows/Linux build checks are separate from runtime/device validation. [Recorded evidence →](docs/VERIFICATION.md) · [Maintainer review rules →](docs/GOVERNANCE.md)
 
 ## What you can do
 
 - **Capture HTTP and HTTPS** through a localhost proxy and a generated Scope CA.
+- **Automate rewrites, mocks and blocks** with persistent, ordered rules. Every exchange retains its provenance and applied-rule evidence. [Rule semantics →](docs/RULES.md)
 - **Choose an Android app** with ADB discovery, device-wide proxy capture, or selected-process Frida instrumentation with selectable proxy, trust, pinning and root-hiding hooks.
-- **Pause and edit requests or responses**, continue or abort them, and inspect the original alongside the edited message. Replay sends directly and creates a separate request; proxy breakpoints apply to traffic sent through the proxy.
-- **Keep named sessions in SQLite.** Bodies, repeated headers, timing and failures survive app restarts. Import/export HAR or a lossless Scope archive.
+- **Pause and edit requests or responses**, continue or abort them, and inspect the original alongside the edited message. Compose an edited replay with current rules and a separate captured result.
+- **Organize sessions in SQLite** with notes, tags and pins. Import/export HAR or a lossless Scope archive; choose a separate lossy, sanitized copy when sharing. Active captures cannot be deleted.
 - **Analyze observed traffic:** endpoint counts, errors, sizes, latency percentiles, repeated requests and differences between two sessions.
-- **Connect an MCP client:** search, inspect, analyze and compare explicitly shared sessions. Replay is opt-in.
+- **Infer observed OpenAPI schemas** without payload examples or credential headers. Captured shapes remain observations, not a complete API contract.
+- **Diagnose Android setup** with read-only checks for authorization, root, ABI, Frida versions, mappings and recovery state.
+- **Connect an MCP client:** search, inspect, analyze and compare shared sessions; edited replay, global rules and device diagnostics have explicit access controls.
 
 Local capture, saved sessions, export and MCP need no account or subscription. Scope's built-in analysis runs locally without an LLM. An external MCP client may send shared results to its configured model provider.
 
@@ -54,13 +57,13 @@ Create a native package with `npm run package`. It builds the companion MCP exec
 
 Open **MCP server** in Scope, share the selected session, and copy the generated configuration into a compatible MCP client. Keep Scope open. No sessions are shared by default, sharing resets when Scope restarts, and replay requires **Allow traffic changes**.
 
-The seven tools are `status`, `list_sessions`, `search_requests`, `get_request`, `analyze_session`, `compare_sessions`, and `replay_request`.
+The twelve tools cover connection, session search, evidence, analysis, comparison, observed OpenAPI, edited replay, rule inventory/create/delete and Android diagnostics. Global-rule access and device diagnostics are separate opt-ins; mutations also need write permission.
 
-Credential redaction applies to MCP output, not to your local capture archive. Redaction is best-effort. [Configuration, tool reference and privacy boundaries →](docs/MCP.md)
+Credential redaction applies to MCP output. Ordinary local archives preserve raw traffic; sanitized export is a separate lossy option. Redaction is best-effort. [Configuration, tool reference and privacy boundaries →](docs/MCP.md)
 
 ![Scope analysis showing endpoint and error evidence from a local demo capture](docs/images/analysis.png)
 
-[More screenshots](docs/SCREENSHOTS.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+[More screenshots](docs/SCREENSHOTS.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · [User needs research](docs/USER-NEEDS.md)
 
 ## Coverage and limits
 
@@ -72,7 +75,7 @@ Credential redaction applies to MCP output, not to your local capture archive. R
 | Android proxy mode                   | Device-wide proxy; selecting an app launches it but does not prove per-app attribution |
 | Android Frida mode                   | Selected process, supported Java APIs; not every TLS/network stack                     |
 | Capture size                         | Buffered, **16 MiB per request or response body**; larger captures fail explicitly     |
-| Streaming / WebSocket frames / HTTP3 | Not implemented in this alpha                                                          |
+| Streaming / WebSocket frames / HTTP3 | Not implemented                                                                        |
 
 Breakpoints expire after 60 seconds and abort the transfer. Sessions live on disk, but analysis and archive import/export currently load records into memory. An observed endpoint or JSON shape is evidence from your captures, not a complete API contract. Android 16/Frida compatibility remains experimental; see [known boundaries](docs/ANDROID.md#compatibility-boundaries).
 

@@ -9,6 +9,9 @@ export interface Session {
   createdAt: number;
   exchangeCount: number;
   revision?: number | string;
+  notes?: string;
+  tags?: string[];
+  pinned?: boolean;
 }
 export interface Exchange {
   id: string;
@@ -28,6 +31,9 @@ export interface Exchange {
   responseBytes: number;
   error: string | null;
   edited: boolean;
+  completed: boolean;
+  provenance?: 'upstream' | 'mock' | 'blocked';
+  appliedRules?: AppliedRule[];
   originalRequest?: unknown;
   originalResponse?: unknown;
 }
@@ -118,5 +124,134 @@ export interface Comparison {
 export interface McpStatus {
   sessionIds: string[];
   allowWrites: boolean;
+  allowRules?: boolean;
+  allowDeviceDiagnostics?: boolean;
   port: number;
+}
+
+export interface RuleMatcher {
+  method?: string;
+  host?: string;
+  pathPrefix?: string;
+  urlContains?: string;
+}
+export type RuleAction =
+  | {
+      type: 'rewriteRequest';
+      method?: string;
+      url?: string;
+      headers?: Header[];
+      body?: string;
+      bodyBase64?: boolean;
+    }
+  | {
+      type: 'rewriteResponse';
+      status?: number;
+      headers?: Header[];
+      body?: string;
+      bodyBase64?: boolean;
+    }
+  | { type: 'mockResponse'; status: number; headers: Header[]; body: string; bodyBase64: boolean }
+  | { type: 'block'; reason?: string };
+export interface TrafficRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  priority: number;
+  matcher: RuleMatcher;
+  action: RuleAction;
+}
+export interface AppliedRule {
+  ruleId: string;
+  name: string;
+  action: string;
+  stage: string;
+}
+export interface SessionUpdate {
+  name?: string;
+  notes?: string;
+  tags?: string[];
+  pinned?: boolean;
+}
+export interface AuditEvent {
+  id: string;
+  createdAt: number;
+  action: string;
+  targetId?: string | null;
+}
+export interface DiagnosticCheck {
+  id: string;
+  status: 'ok' | 'warning' | 'error' | 'info';
+  title: string;
+  detail: string;
+  action: string | null;
+  command: string | null;
+}
+export interface DeviceDiagnostics {
+  checkedAt: number;
+  readOnly: true;
+  selectedSerial: string | null;
+  readyForProxy: boolean;
+  readyForFrida: boolean;
+  adb: { path: string | null; available: boolean; version: string | null; error: string | null };
+  devices: Device[];
+  device: {
+    serial: string;
+    model: string;
+    state: string;
+    authorized: boolean;
+    rootStatus: string;
+    rootMethod: string | null;
+    abi: string | null;
+    androidVersion: string | null;
+    sdk: number | null;
+    error: string | null;
+  } | null;
+  frida: {
+    runtimeKind: string | null;
+    runtimePath: string | null;
+    runtimeAvailable: boolean;
+    runtimeVersion: string | null;
+    runtimeError: string | null;
+    serverSource: string | null;
+    serverPath: string | null;
+    serverAvailable: boolean;
+    serverVersion: string | null;
+    serverVersionVerified: boolean;
+    serverRunning: boolean;
+    versionMatch: boolean | null;
+    abiSupported: boolean | null;
+    serverError: string | null;
+    experimental: true;
+  };
+  mappings: {
+    reverse: Mapping[];
+    forward: Mapping[];
+    owned: Mapping[];
+    globalProxy: string | null;
+    error: string | null;
+  };
+  recovery: {
+    exists: boolean;
+    valid: boolean;
+    needsCleanup: boolean;
+    active: boolean;
+    serial: string | null;
+    package: string | null;
+    mode: string | null;
+    proxyPort: number | null;
+    forwardPort: number | null;
+    serverPid: string | number | null;
+    caHash: string | null;
+    error: string | null;
+  };
+  checks: DiagnosticCheck[];
+  notes: string[];
+}
+export interface Mapping {
+  serial: string;
+  kind: 'forward' | 'reverse';
+  local: string;
+  remote: string;
+  owned: boolean;
 }

@@ -43,6 +43,40 @@ async fn execute(app: &AppCore, command: &str, args: Value) -> Result<Value> {
     Ok(match command {
         "bootstrap" => app.bootstrap()?,
         "list_sessions" => serde_json::to_value(e.list_sessions()?)?,
+        "list_rules" => serde_json::to_value(e.list_rules()?)?,
+        "save_rule" => serde_json::to_value(
+            e.save_rule(serde_json::from_value(
+                args.get("rule")
+                    .cloned()
+                    .ok_or_else(|| anyhow!("Missing rule"))?,
+            )?)?,
+        )?,
+        "delete_rule" => {
+            e.delete_rule(string(&args, "id")?)?;
+            json!({"ok":true})
+        }
+        "update_session" => serde_json::to_value(
+            e.update_session(
+                string(&args, "id")?,
+                serde_json::from_value(
+                    args.get("update")
+                        .cloned()
+                        .ok_or_else(|| anyhow!("Missing update"))?,
+                )?,
+            )?,
+        )?,
+        "delete_session" => {
+            e.delete_session(string(&args, "id")?)?;
+            json!({"ok":true})
+        }
+        "list_audit" => serde_json::to_value(
+            e.list_audit(
+                args.get("limit")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(200)
+                    .min(1000) as usize,
+            )?,
+        )?,
         "create_session" => serde_json::to_value(
             e.create_session(
                 string(&args, "name")?.to_string(),
@@ -78,6 +112,7 @@ async fn execute(app: &AppCore, command: &str, args: Value) -> Result<Value> {
         }
         "get_exchange" => serde_json::to_value(e.get_exchange(string(&args, "id")?)?)?,
         "analysis" => e.analysis(string(&args, "sessionId")?)?,
+        "infer_openapi" => e.infer_openapi(string(&args, "sessionId")?)?,
         "export_har" => e.export_har(string(&args, "sessionId")?)?,
         "export_session" => e.export_session(string(&args, "sessionId")?)?,
         "import_har" => serde_json::to_value(
@@ -109,11 +144,13 @@ async fn execute(app: &AppCore, command: &str, args: Value) -> Result<Value> {
             serde_json::to_value(e.proxy_status())?
         }
         "set_breakpoints" => {
+            e.record_audit("breakpoint.configure", None)?;
             e.set_breakpoints(boolean(&args, "request"), boolean(&args, "response"));
             serde_json::to_value(e.proxy_status())?
         }
         "pending" => serde_json::to_value(e.pending())?,
         "resolve_breakpoint" => {
+            e.record_audit("breakpoint.resolve", Some(string(&args, "id")?))?;
             e.resolve_breakpoint(
                 string(&args, "id")?,
                 serde_json::from_value(
@@ -139,6 +176,15 @@ async fn execute(app: &AppCore, command: &str, args: Value) -> Result<Value> {
             e.compare_sessions(string(&args, "left")?, string(&args, "right")?)?
         }
         "list_devices" => serde_json::to_value(app.devices.list_devices().await?)?,
+        "device_diagnostics" => serde_json::to_value(
+            app.devices
+                .diagnostics(
+                    args.get("serial")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
+                )
+                .await?,
+        )?,
         "list_apps" => {
             serde_json::to_value(app.devices.list_apps(string(&args, "serial")?).await?)?
         }
@@ -149,6 +195,7 @@ async fn execute(app: &AppCore, command: &str, args: Value) -> Result<Value> {
                 proxy.running,
                 "Start a capture session before connecting an Android app"
             );
+            e.record_audit("device.start", None)?;
             serde_json::to_value(
                 app.devices
                     .start(
@@ -162,10 +209,15 @@ async fn execute(app: &AppCore, command: &str, args: Value) -> Result<Value> {
                     .await?,
             )?
         }
-        "stop_device" => serde_json::to_value(app.devices.stop().await?)?,
+        "stop_device" => {
+            e.record_audit("device.stop", None)?;
+            serde_json::to_value(app.devices.stop().await?)?
+        }
         "set_mcp_scope" => app.set_mcp_scope(
             serde_json::from_value(args.get("sessionIds").cloned().unwrap_or(json!([])))?,
             boolean(&args, "allowWrites"),
+            boolean(&args, "allowRules"),
+            boolean(&args, "allowDeviceDiagnostics"),
         )?,
         "generate_demo" => {
             app.generate_demo(string(&args, "sessionId")?.to_string())
@@ -197,19 +249,28 @@ async fn save_export(app: &AppCore, handle: tauri::AppHandle, args: Value) -> Re
     let id = string(&args, "sessionId")?;
     let format = string(&args, "format")?;
     anyhow::ensure!(
-        format == "har" || format == "scope",
+        matches!(format, "har" | "scope" | "openapi"),
         "Unknown export format"
     );
-    let value = if format == "har" {
+    let mut value = if format == "har" {
         app.engine.export_har(id)?
+    } else if format == "openapi" {
+        app.engine.infer_openapi(id)?
     } else {
         app.engine.export_session(id)?
     };
+    if boolean(&args, "redact") && format != "openapi" {
+        value = service::sanitize_archive(value);
+    }
     let extension = if format == "har" { "har" } else { "json" };
     let name = format!(
         "scope-{}.{}",
         &id[..id.len().min(8)],
-        if format == "har" { "har" } else { "scope.json" }
+        match format {
+            "har" => "har",
+            "openapi" => "openapi.json",
+            _ => "scope.json",
+        }
     );
     let (tx, rx) = tokio::sync::oneshot::channel();
     handle
@@ -229,6 +290,7 @@ async fn save_export(app: &AppCore, handle: tauri::AppHandle, args: Value) -> Re
         .into_path()
         .map_err(|e| anyhow!("Invalid export path: {e}"))?;
     service::write_private(&path, &serde_json::to_vec_pretty(&value)?)?;
+    app.engine.record_audit("session.export", Some(id))?;
     Ok(json!({"saved":true,"path":path}))
 }
 
@@ -261,7 +323,7 @@ pub async fn headless() -> Result<()> {
             .engine
             .create_session("Local demo".into(), "local-demo".into())?;
         app.generate_demo(session.id.clone()).await?;
-        app.set_mcp_scope(vec![session.id], false)?;
+        app.set_mcp_scope(vec![session.id], false, false, false)?;
     }
     println!(
         "{}",

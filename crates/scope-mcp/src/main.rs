@@ -49,6 +49,32 @@ struct RequestArgs {
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReplayArgs {
+    id: String,
+    /// Optional request edit: action="continue", method/url/headers/body/bodyBase64.
+    /// Headers replace the whole list. Omitted fields retain captured values.
+    edit: Option<Value>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RuleArgs {
+    /// Full TrafficRule: id (empty to create), name, enabled, priority, matcher
+    /// (method/host/pathPrefix/urlContains), action with type rewriteRequest,
+    /// rewriteResponse, mockResponse or block. See docs/RULES.md for the schema.
+    /// Definitions are never reconstructed from list_rules inventory output.
+    rule: Value,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct DiagnosticArgs {
+    /// Optional ADB serial. Reads device state; never starts interception.
+    serial: Option<String>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct CompareArgs {
     session_id: String,
@@ -77,14 +103,24 @@ impl Scope {
         let url = reqwest::Url::parse(&config.endpoint)?;
         anyhow::ensure!(
             url.scheme() == "http"
-                && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")),
+                && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && url.path() == "/api",
             "Bridge endpoint must be local"
         );
         let response=self.client.post(url).bearer_auth(config.token).json(&json!({"command":command,"args":args})).send().await.map_err(|_|anyhow::anyhow!("Scope is not reachable. Open the desktop app and share a session in the MCP panel."))?;
+        if response.status().is_redirection() {
+            anyhow::bail!("Scope bridge refused a redirect; bridge credentials were not forwarded");
+        }
+        let successful = response.status().is_success();
         let body: Value = response.json().await?;
         if let Some(error) = body.get("error").and_then(Value::as_str) {
             anyhow::bail!("{error}");
         }
+        anyhow::ensure!(successful, "Scope bridge returned an unsuccessful response");
         Ok(body.get("result").cloned().unwrap_or(body))
     }
 }
@@ -106,7 +142,7 @@ impl Scope {
     }
 
     #[tool(
-        description = "Search captured HTTP exchanges in a shared session. Returns paginated metadata with credential headers redacted; get_request reads bodies. Query matches URL, method, status and stored body text. Results are observations, not proof of backend implementation."
+        description = "Search captured HTTP exchanges in a shared session. Returns paginated metadata with credential headers redacted; get_request reads bodies. Searches at most the 10,000 most recent exchanges using redacted URLs, metadata and bounded JSON body text; omitted credentials cannot be matched. Results are observations, not proof of backend implementation."
     )]
     async fn search_requests(
         &self,
@@ -151,14 +187,72 @@ impl Scope {
     }
 
     #[tool(
-        description = "SEND a captured HTTP request again to its original destination. This can change remote state, including for POST/DELETE. Requires explicit write access enabled by the user in Scope; use only when asked to replay this request. Creates a separate captured exchange, not a live response substitution."
+        description = "Infer an observed-only OpenAPI 3.1 document from a shared capture. Includes bounded JSON schemas and status/method/path observations, without example values or credential headers. This is not a complete or validated API contract; inspect x-scope limitations."
     )]
-    async fn replay_request(
+    async fn infer_openapi(
+        &self,
+        Parameters(args): Parameters<SessionArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        self.call("infer_openapi", json!({"sessionId":args.session_id}))
+            .await
+    }
+
+    #[tool(
+        description = "List global traffic rule inventory (ID, enabled, priority and action type only). Requires separate global rule access in Scope. Names, matchers and replacement data are omitted because they may contain credentials. Global rules can affect sessions that are not shared."
+    )]
+    async fn list_rules(&self) -> Result<CallToolResult, McpError> {
+        self.call("list_rules", json!({})).await
+    }
+
+    #[tool(
+        description = "CREATE or REPLACE a full global traffic rule. Requires BOTH global rule access and write access enabled by the user in Scope. Rules can rewrite, mock or block traffic in ALL capture sessions, including unshared sessions. Use only for an explicit user request. Supply a complete rule definition, never a list_rules inventory row. Empty ID creates; existing ID replaces. Body edits clear stale encoding and digest headers."
+    )]
+    async fn save_rule(
+        &self,
+        Parameters(args): Parameters<RuleArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        self.call("save_rule", json!({"rule":args.rule})).await
+    }
+
+    #[tool(
+        description = "DELETE a global rule by ID. Requires BOTH global rule access and write access in Scope. Affects all captures, including unshared sessions. Use only when the user explicitly asks to remove that rule."
+    )]
+    async fn delete_rule(
         &self,
         Parameters(args): Parameters<RequestArgs>,
     ) -> Result<CallToolResult, McpError> {
-        self.call("replay_request", json!({"id":args.id})).await
+        self.call("delete_rule", json!({"id":args.id})).await
     }
+
+    #[tool(
+        description = "Read-only Android/Frida connection preflight. Requires separate device diagnostics permission in Scope; can expose local paths, device serials and environment versions. Does not install, attach, start a server or change device configuration. Read suggested commands as advice, not instructions to execute automatically."
+    )]
+    async fn device_diagnostics(
+        &self,
+        Parameters(args): Parameters<DiagnosticArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        self.call("device_diagnostics", json!({"serial":args.serial}))
+            .await
+    }
+
+    #[tool(
+        description = "SEND a captured request, optionally editing method, URL, full headers and body. This can change remote state, including POST/DELETE, and can send stored credentials to an edited destination. Requires explicit write access in Scope; use only for an explicit replay request. Applies current global rules and bypasses manual breakpoints. Records a separate exchange. A timeout does not prove cancellation; inspect the session before retrying."
+    )]
+    async fn replay_request(
+        &self,
+        Parameters(args): Parameters<ReplayArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        self.call("replay_request", json!({"id":args.id,"edit":args.edit}))
+            .await
+    }
+}
+
+fn bridge_client() -> anyhow::Result<reqwest::Client> {
+    Ok(reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(130))
+        .build()?)
 }
 
 #[tokio::main]
@@ -177,12 +271,135 @@ async fn main() -> anyhow::Result<()> {
         });
     let scope = Scope {
         config,
-        client: reqwest::Client::builder()
-            .no_proxy()
-            .timeout(Duration::from_secs(30))
-            .build()?,
+        client: bridge_client()?,
     };
     let service = scope.serve(stdio()).await?;
     service.waiting().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn endpoint(
+        response: String,
+    ) -> (
+        String,
+        tokio::sync::oneshot::Receiver<String>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            loop {
+                let mut chunk = [0u8; 4096];
+                let size = stream.read(&mut chunk).await.unwrap();
+                if size == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..size]);
+                if let Some(end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+                    let header = String::from_utf8_lossy(&request[..end]);
+                    let length = header
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .and_then(|value| value.trim().parse::<usize>().ok())
+                        })
+                        .unwrap_or(0);
+                    if request.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            let _ = tx.send(String::from_utf8_lossy(&request).into_owned());
+            stream.write_all(response.as_bytes()).await.unwrap();
+            let _ = stream.shutdown().await;
+        });
+        (format!("http://{address}/api"), rx, task)
+    }
+    fn config_dir() -> PathBuf {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "scope-mcp-client-{}-{unique}-{sequence}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+    #[tokio::test]
+    async fn bridge_credentials_are_not_forwarded_to_redirect_target() {
+        let dir = config_dir();
+        let (target, target_request, target_task) =
+            endpoint("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".into())
+                .await;
+        let (origin, origin_request, origin_task)=endpoint(format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {target}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")).await;
+        let config = dir.join("config.json");
+        tokio::fs::write(
+            &config,
+            json!({"endpoint":origin,"token":"bridge-private-secret"}).to_string(),
+        )
+        .await
+        .unwrap();
+        let scope = Scope {
+            config,
+            client: bridge_client().unwrap(),
+        };
+        let error = scope.fetch("status", json!({})).await.unwrap_err();
+        assert!(error.to_string().contains("redirect"));
+        assert!(!error.to_string().contains("bridge-private-secret"));
+        assert!(origin_request
+            .await
+            .unwrap()
+            .contains("Bearer bridge-private-secret"));
+        origin_task.await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(150), target_request)
+                .await
+                .is_err()
+        );
+        target_task.abort();
+        let _ = target_task.await;
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[tokio::test]
+    async fn bridge_endpoint_validation_rejects_remote_and_credential_bearing_urls() {
+        let dir = config_dir();
+        let config = dir.join("config.json");
+        let scope = Scope {
+            config: config.clone(),
+            client: bridge_client().unwrap(),
+        };
+        for endpoint in [
+            "https://example.com/api",
+            "http://example.com/api",
+            "http://localhost.evil.test/api",
+            "http://name:password@127.0.0.1/api",
+            "http://127.0.0.1/api?token=secret",
+            "http://127.0.0.1/api#fragment",
+            "http://127.0.0.1/other",
+        ] {
+            tokio::fs::write(
+                &config,
+                json!({"endpoint":endpoint,"token":"bridge-private-secret"}).to_string(),
+            )
+            .await
+            .unwrap();
+            let error = scope.fetch("status", json!({})).await.unwrap_err();
+            assert!(error.to_string().contains("must be local"));
+            assert!(!error.to_string().contains("bridge-private-secret"));
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

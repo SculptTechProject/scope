@@ -24,7 +24,7 @@ flowchart LR
 | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `crates/scope-core`     | HTTP(S) interception, CA, breakpoints, replay, SQLite archive, HAR/native formats, analysis and comparison |
 | `crates/scope-device`   | ADB discovery, input validation, device setup, owned-resource cleanup and recovery records                 |
-| `crates/scope-mcp`      | stdio MCP protocol and the seven tool schemas; calls the desktop's local bridge                            |
+| `crates/scope-mcp`      | stdio MCP protocol and twelve tool schemas; calls the desktop's local bridge                               |
 | `src-tauri`             | Desktop lifecycle, native dialogs, command dispatch, MCP access policy and local demo server               |
 | `src`                   | React inspector, sessions, device setup, analysis, comparison and MCP settings                             |
 | `resources/device`      | Frida worker, setup helpers and certificate injection template                                             |
@@ -42,6 +42,18 @@ Bodies are buffered with an explicit **16 MiB per-body limit**. Oversized bodies
 
 Request and response breakpoints hold the corresponding transfer until continued, aborted, timed out or shut down. The timeout is 60 seconds. Edited messages retain original snapshots in the local archive. Replay sends a separate request and records a separate exchange.
 
+Persistent global rules are validated before atomic replacement. Each incoming
+request snapshots matching rules; rewrites and synthetic responses precede manual
+breakpoints. Rule metadata and original messages survive archive roundtrips.
+`completed` distinguishes active transfers from real failures. Restart/import
+turns interrupted records into explicit completed errors. Analysis reports mock,
+blocked, completed and unfinished counts separately. [Rule semantics](RULES.md)
+
+Session metadata and a bounded 10,000-entry audit journal share the SQLite store.
+Audit records contain action, timestamp and optional opaque target ID; traffic,
+URLs, package names, rule payloads and credential values are not journaled. This
+is a local operational journal, not a tamper-proof compliance audit system.
+
 ## Device lifecycle
 
 `scope-device` records previous device state and its owned proxy/reverse/forward/server/certificate resources before mutation. Start and Stop are explicit device operations; listing devices/apps does not install certificates or change the proxy. A root probe may trigger the device's superuser authorization UI.
@@ -54,7 +66,13 @@ A failed cleanup retains its recovery record and blocks a conflicting new start.
 
 The desktop starts an authenticated HTTP bridge on loopback (`127.0.0.1:17892` by default). It writes a fresh token and endpoint to `mcp-bridge.json`; on Unix the file permissions are `0600`. `scope-mcp` reads this file and translates stdio tool calls to the live engine. This bridge is an internal implementation detail, not a public remote service.
 
-MCP session scope and replay permission live in memory and reset on desktop restart. Both sessions must be shared for comparison; knowing an exchange ID does not bypass session scope. Output redacts known credential fields, omits original snapshots, omits non-JSON bodies and bounds JSON body output to 64 KiB. The local archive preserves the raw captured data. [MCP configuration and tool reference](MCP.md)
+MCP session, write, global-rule and diagnostic permissions live in memory and
+reset on desktop restart. Both sessions must be shared for comparison; knowing
+an exchange ID does not bypass scope. Global rule reads require their separate
+permission, and mutations also require writes. Diagnostics is independently
+gated. Output masks known credentials, omits original snapshots and non-JSON
+bodies, and bounds JSON bodies to 64 KiB. Raw local storage remains intact.
+[MCP configuration and tool reference](MCP.md)
 
 ## Local endpoints and files
 

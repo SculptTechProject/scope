@@ -1,5 +1,32 @@
 # Recorded verification
 
+## 1.0.0 review branch — 2026-11-02
+
+Source/package version is `1.0.0` on `release/1.0.0`. This is a review candidate,
+not a published 1.0.0 release. The existing alpha evidence is retained below.
+
+Checks run during candidate preparation:
+
+- 52 Rust workspace tests passed: 22 core, 23 device, 5 desktop policy/redaction
+  and 2 MCP transport tests. Rules use real HTTP/TLS fixtures; diagnostics and
+  cleanup use fake ADB fixtures rather than a newly booted emulator.
+- Regressions cover proxy Stop during a held replay, deletion/cancellation
+  ownership, Scope session IDs versus payload credential names, valid OpenAPI
+  schema fields and redacted-search membership isolation.
+- 10 frontend interaction tests passed on Node 22.22.3; TypeScript/Vite built.
+- Strict workspace Clippy, actionlint, two Node release-resource tests and three
+  Python installer tests passed. npm audit reports zero vulnerabilities.
+- The macOS arm64 native package built and its complete ad-hoc signature verified.
+- Cargo audit's vulnerability list has zero entries; the Linux glib unsoundness
+  and two unmaintained-dependency warnings remain documented in DEPENDENCIES.md.
+
+The following checks are being completed before the PR is marked ready: the
+final bundle's process-level MCP smoke, native UI scenarios, clean screenshots
+and all three CI builds. Their results will be recorded here, including failures
+or unavailable coverage. No new physical Android or Windows/Linux runtime
+validation is implied by the local tests. No 1.0.0 tag, merge or publication is
+performed automatically.
+
 Date: 2026-11-02. Host: macOS arm64. Application version 0.1.0; verification baseline for prerelease `v0.1.0-alpha.1`.
 
 ## Automated checks

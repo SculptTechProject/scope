@@ -328,6 +328,11 @@ try {
     'analyze_session',
     'compare_sessions',
     'replay_request',
+    'infer_openapi',
+    'list_rules',
+    'save_rule',
+    'delete_rule',
+    'device_diagnostics',
   ])
     assert.ok(
       tools.tools.some((item) => item.name === tool),
@@ -345,6 +350,12 @@ try {
   const analysis = await mcp.tool('analyze_session', { sessionId });
   assert.equal(analysis.totalRequests, 6);
   assert.equal(analysis.totalErrors, 1);
+  assert.equal(analysis.inFlightRequests, 0);
+  const openapi = await mcp.tool('infer_openapi', { sessionId });
+  assert.match(openapi.openapi, /^3\.1\./);
+  assert.ok(Object.keys(openapi.paths).length >= 1);
+  assert.match(await mcp.tool('list_rules', {}, true), /rule access is disabled/i);
+  assert.match(await mcp.tool('device_diagnostics', {}, true), /diagnostics access is disabled/i);
   assert.match(await mcp.tool('replay_request', { id: one.id }, true), /replay is disabled/i);
   assert.match(await mcp.tool('search_requests', { sessionId: randomUUID() }, true), /not shared/i);
   assert.match(
@@ -352,7 +363,7 @@ try {
     /both sessions must be shared/i,
   );
   console.log(
-    'PASS desktop + MCP initialization, seven tools, real capture reads, analysis, authentication, scope checks and replay denial',
+    'PASS desktop + MCP initialization, twelve tools, capture reads, observed OpenAPI, authentication, scope/rule/diagnostic gates and replay denial',
   );
 
   const secret = `scope-smoke-secret-${randomUUID()}`;

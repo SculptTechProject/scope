@@ -13,6 +13,7 @@ async fn main() -> Result<()> {
     let manager = DeviceManager::new(runtime);
     match arguments.first().map(String::as_str) {
         Some("devices") => println!("{}", serde_json::to_string_pretty(&manager.list_devices().await?)?),
+        Some("diagnostics") => println!("{}", serde_json::to_string_pretty(&manager.diagnostics(arguments.get(1).cloned()).await?)?),
         Some("apps") => println!("{}", serde_json::to_string_pretty(&manager.list_apps(arguments.get(1).context("Missing serial")?).await?)?),
         Some("stop") => println!("{}", serde_json::to_string_pretty(&manager.stop().await?)?),
         Some("start") => {
@@ -24,7 +25,7 @@ async fn main() -> Result<()> {
             BufReader::new(tokio::io::stdin()).read_line(&mut input).await?;
             println!("{}", serde_json::to_string_pretty(&manager.stop().await?)?);
         }
-        _ => bail!("Usage: device devices | apps <serial> | start <serial> <package> <mode> <port> <ca.pem> | stop"),
+        _ => bail!("Usage: device devices | diagnostics [serial] | apps <serial> | start <serial> <package> <mode> <port> <ca.pem> | stop"),
     }
     Ok(())
 }

@@ -9,6 +9,10 @@ import {
   ArrowUpFromLine,
   BarChart3,
   Check,
+  Clock3,
+  GitBranch,
+  Pin,
+  Stethoscope,
   ChevronDown,
   ChevronRight,
   Circle,
@@ -40,6 +44,13 @@ import {
   Zap,
 } from 'lucide-react';
 import { api, isNative } from './api';
+import { isExchangeError } from './exchange-utils';
+import { ExchangeStatus as Status } from './components/ExchangeStatus';
+import { RulesWorkspace } from './components/RulesWorkspace';
+import { ReplayComposer } from './components/ReplayComposer';
+import { SessionDetails } from './components/SessionDetails';
+import { ActivityWorkspace } from './components/ActivityWorkspace';
+import { DiagnosticsWorkspace } from './components/DiagnosticsWorkspace';
 import type {
   Analysis,
   App as AndroidApp,
@@ -58,7 +69,7 @@ import type {
 } from './types';
 
 type View = 'traffic' | 'analysis' | 'compare';
-type Panel = 'device' | 'mcp' | 'connection' | null;
+type Panel = 'device' | 'mcp' | 'connection' | 'rules' | 'activity' | 'diagnostics' | null;
 const initialProxy: ProxyStatus = {
   running: false,
   port: 17890,
@@ -129,15 +140,6 @@ function IconButton({
     >
       {children}
     </button>
-  );
-}
-function Status({ code, error }: { code: number | null; error?: string | null }) {
-  return (
-    <span
-      className={`status-code ${error || (code && code >= 400) ? 'status-error' : code && code >= 300 ? 'status-redirect' : 'status-ok'}`}
-    >
-      {error ? 'ERR' : (code ?? '…')}
-    </span>
   );
 }
 function Empty({
@@ -234,6 +236,9 @@ export default function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [newSession, setNewSession] = useState(false);
+  const [sessionDetails, setSessionDetails] = useState<Session | null>(null);
+  const [replayDraft, setReplayDraft] = useState<Exchange | null>(null);
+  const [exportRedacted, setExportRedacted] = useState(true);
   const [exportOpen, setExportOpen] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [comparison, setComparison] = useState<Comparison | null>(null);
@@ -345,9 +350,15 @@ export default function App() {
     const summary = exchanges.find((row) => row.id === selected.id);
     if (!summary) return;
     const lifecycle = (row: Exchange) =>
-      [row.status, row.error, row.edited, row.durationMs, row.requestBytes, row.responseBytes].join(
-        '|',
-      );
+      [
+        row.status,
+        row.error,
+        row.edited,
+        row.completed,
+        row.durationMs,
+        row.requestBytes,
+        row.responseBytes,
+      ].join('|');
     if (lifecycle(summary) === lifecycle(selected)) return;
     let alive = true;
     api
@@ -412,24 +423,30 @@ export default function App() {
       setExchanges(await api.list_exchanges(id, query, limit));
       setNotice('Real HTTP requests captured through your local proxy.');
     });
-  const exportFile = (format: 'har' | 'scope') =>
+  const exportFile = (format: 'har' | 'scope' | 'openapi') =>
     perform('export', async () => {
       if (!sessionId) return;
       if (native) {
-        const result = await api.save_export(sessionId, format);
+        const result = await api.save_export(sessionId, format, exportRedacted);
         if (result.saved)
           setNotice(
-            `${format === 'har' ? 'HAR' : 'Scope session'} exported${result.path ? ` to ${result.path}` : ''}.`,
+            `${format === 'har' ? 'HAR' : format === 'openapi' ? 'Observed OpenAPI' : 'Scope session'} exported${result.path ? ` to ${result.path}` : ''}.`,
           );
         return;
       }
       const data =
-        format === 'har' ? await api.export_har(sessionId) : await api.export_session(sessionId);
+        format === 'har'
+          ? await api.export_har(sessionId)
+          : format === 'openapi'
+            ? await api.infer_openapi(sessionId)
+            : await api.export_session(sessionId);
       download(
         data,
-        `${(selectedSession?.name || 'session').replace(/[^a-z0-9-]/gi, '-').toLowerCase()}.${format === 'har' ? 'har' : 'scope.json'}`,
+        `${(selectedSession?.name || 'session').replace(/[^a-z0-9-]/gi, '-').toLowerCase()}.${format === 'har' ? 'har' : format === 'openapi' ? 'openapi.json' : 'scope.json'}`,
       );
-      setNotice(`${format === 'har' ? 'HAR' : 'Scope session'} exported.`);
+      setNotice(
+        `${format === 'har' ? 'HAR' : format === 'openapi' ? 'Observed OpenAPI' : 'Scope session'} exported.`,
+      );
     });
   async function importFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -458,16 +475,27 @@ export default function App() {
   const filtered = exchanges.filter(
     (e) =>
       statusFilter === 'all' ||
-      (statusFilter === 'errors' && (e.error || (e.status ?? 0) >= 400)) ||
+      (statusFilter === 'errors' && isExchangeError(e)) ||
       (statusFilter === '2xx' && (e.status ?? 0) >= 200 && (e.status ?? 0) < 300) ||
       (statusFilter === 'edited' && e.edited),
   );
   const requestCount = exchanges.length;
   const totalSize = exchanges.reduce((n, e) => n + e.requestBytes + e.responseBytes, 0);
-  const runMcp = (ids: string[], writes: boolean) =>
+  const runMcp = (
+    ids: string[],
+    writes: boolean,
+    rules = mcp.allowRules || false,
+    diagnostics = mcp.allowDeviceDiagnostics || false,
+  ) =>
     perform('mcp', async () => {
-      await api.set_mcp_scope(ids, writes);
-      setMcp({ ...mcp, sessionIds: ids, allowWrites: writes });
+      await api.set_mcp_scope(ids, writes, rules, diagnostics);
+      setMcp({
+        ...mcp,
+        sessionIds: ids,
+        allowWrites: writes,
+        allowRules: rules,
+        allowDeviceDiagnostics: diagnostics,
+      });
       setNotice('MCP access updated.');
     });
 
@@ -481,7 +509,7 @@ export default function App() {
             <span />
           </div>
           <span className="brand-name">scope</span>
-          <span className="preview-badge">alpha</span>
+          <span className="preview-badge">local</span>
         </div>
         <button
           className={`device-switch ${panel === 'device' ? 'is-open' : ''}`}
@@ -508,6 +536,10 @@ export default function App() {
             <span>Traffic</span>
             <span className="nav-count">{count}</span>
           </button>
+          <button className={panel === 'rules' ? 'selected' : ''} onClick={() => setPanel('rules')}>
+            <GitBranch size={17} />
+            <span>Traffic rules</span>
+          </button>
           <button
             onClick={() => {
               setView('analysis');
@@ -531,9 +563,19 @@ export default function App() {
         </nav>
         <div className="sidebar-heading">
           <span>Saved sessions</span>
-          <IconButton label="New session" onClick={() => setNewSession(true)}>
-            <Plus size={16} />
-          </IconButton>
+          <div className="sidebar-session-actions">
+            {selectedSession && (
+              <IconButton
+                label="Manage selected session"
+                onClick={() => setSessionDetails(selectedSession)}
+              >
+                <MoreHorizontal size={15} />
+              </IconButton>
+            )}
+            <IconButton label="New session" onClick={() => setNewSession(true)}>
+              <Plus size={16} />
+            </IconButton>
+          </div>
         </div>
         <div className="session-list">
           {loading ? (
@@ -541,29 +583,31 @@ export default function App() {
               <LoaderCircle size={14} className="spin" /> Opening archive…
             </div>
           ) : sessions.length ? (
-            sessions.map((s) => (
-              <button
-                className={`session-item ${s.id === sessionId ? 'current' : ''}`}
-                onClick={() => {
-                  setSessionId(s.id);
-                  setPanel(null);
-                }}
-                key={s.id}
-              >
-                <FolderArchive size={15} />
-                <span>
-                  <strong>{s.name}</strong>
-                  <small>
-                    {new Date(s.createdAt).toLocaleDateString([], {
-                      month: 'short',
-                      day: 'numeric',
-                    })}{' '}
-                    <span>·</span> {s.exchangeCount} requests
-                  </small>
-                </span>
-                {proxy.running && proxy.sessionId === s.id && <span className="live-dot" />}
-              </button>
-            ))
+            [...sessions]
+              .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.createdAt - a.createdAt)
+              .map((s) => (
+                <button
+                  className={`session-item ${s.id === sessionId ? 'current' : ''}`}
+                  onClick={() => {
+                    setSessionId(s.id);
+                    setPanel(null);
+                  }}
+                  key={s.id}
+                >
+                  {s.pinned ? <Pin size={15} /> : <FolderArchive size={15} />}
+                  <span>
+                    <strong>{s.name}</strong>
+                    <small>
+                      {new Date(s.createdAt).toLocaleDateString([], {
+                        month: 'short',
+                        day: 'numeric',
+                      })}{' '}
+                      <span>·</span> {s.exchangeCount} requests
+                    </small>
+                  </span>
+                  {proxy.running && proxy.sessionId === s.id && <span className="live-dot" />}
+                </button>
+              ))
           ) : (
             <div className="sidebar-hint">
               Your captures will live here.
@@ -583,6 +627,20 @@ export default function App() {
           <div className="sidebar-heading">
             <span>Tools</span>
           </div>
+          <button
+            onClick={() => setPanel('activity')}
+            className={panel === 'activity' ? 'selected' : ''}
+          >
+            <Clock3 size={17} />
+            <span>Activity trail</span>
+          </button>
+          <button
+            onClick={() => setPanel('diagnostics')}
+            className={panel === 'diagnostics' ? 'selected' : ''}
+          >
+            <Stethoscope size={17} />
+            <span>Diagnostics</span>
+          </button>
           <button onClick={() => setPanel('mcp')} className={panel === 'mcp' ? 'selected' : ''}>
             <Code2 size={17} />
             <span>MCP server</span>
@@ -608,6 +666,14 @@ export default function App() {
             <span>Workspace</span>
             <ChevronRight size={13} />
             <strong>{selectedSession?.name || 'New capture'}</strong>
+            {selectedSession && (
+              <IconButton
+                label="Session details"
+                onClick={() => setSessionDetails(selectedSession)}
+              >
+                <MoreHorizontal size={15} />
+              </IconButton>
+            )}
             <span className="autosave">
               <ShieldCheck size={12} /> {selectedSession ? 'Autosaved' : 'Local archive'}
             </span>
@@ -624,6 +690,32 @@ export default function App() {
               </button>
               {exportOpen && (
                 <div className="export-menu">
+                  <div className="export-privacy">
+                    <strong>Capture export content</strong>
+                    <label>
+                      <input
+                        type="radio"
+                        name="export-privacy"
+                        checked={exportRedacted}
+                        onChange={() => setExportRedacted(true)}
+                      />{' '}
+                      Sanitized
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="export-privacy"
+                        checked={!exportRedacted}
+                        onChange={() => setExportRedacted(false)}
+                      />{' '}
+                      Raw capture
+                    </label>
+                    <p>
+                      {exportRedacted
+                        ? 'Masks recognized credential fields. Review custom secrets before sharing.'
+                        : 'Includes captured headers and bodies, including credentials.'}
+                    </p>
+                  </div>
                   <button
                     onClick={() => {
                       setExportOpen(false);
@@ -644,6 +736,17 @@ export default function App() {
                     <FolderArchive size={14} />
                     <span>
                       Scope session<small>Includes originals and edits</small>
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setExportOpen(false);
+                      void exportFile('openapi');
+                    }}
+                  >
+                    <Code2 size={14} />
+                    <span>
+                      Observed OpenAPI<small>Inferred from this session's evidence</small>
                     </span>
                   </button>
                 </div>
@@ -679,7 +782,18 @@ export default function App() {
             </IconButton>
           </div>
         )}
-        {panel === 'device' ? (
+        {panel === 'rules' ? (
+          <RulesWorkspace native={native} />
+        ) : panel === 'activity' ? (
+          <ActivityWorkspace native={native} />
+        ) : panel === 'diagnostics' ? (
+          <DiagnosticsWorkspace
+            native={native}
+            proxy={proxy}
+            version={boot?.version}
+            onOpenDevice={() => setPanel('device')}
+          />
+        ) : panel === 'device' ? (
           <DevicePanel
             device={device}
             proxy={proxy}
@@ -900,7 +1014,11 @@ export default function App() {
                                 {isPaused ? (
                                   <span className="status-code status-paused">Paused</span>
                                 ) : (
-                                  <Status code={row.status} error={row.error} />
+                                  <Status
+                                    code={row.status}
+                                    error={row.error}
+                                    completed={row.completed}
+                                  />
                                 )}
                               </td>
                               <td className="numeric">{ms(row.durationMs)}</td>
@@ -975,19 +1093,7 @@ export default function App() {
                   <RequestInspector
                     selected={selected}
                     onReplay={() => {
-                      if (!selected || replayingId) return;
-                      const id = selected.id;
-                      setReplayingId(id);
-                      setError('');
-                      void api
-                        .replay(id)
-                        .then(async (replayed) => {
-                          await refreshSessions();
-                          if (sessionIdRef.current === replayed.sessionId) setSelected(replayed);
-                          setNotice('Request replayed. This was a new outbound request.');
-                        })
-                        .catch((e) => setError(errorText(e)))
-                        .finally(() => setReplayingId(''));
+                      if (selected && !replayingId) setReplayDraft(selected);
                     }}
                     busy={!!busy || !!replayingId}
                   />
@@ -1065,6 +1171,44 @@ export default function App() {
             <X size={13} />
           </IconButton>
         </div>
+      )}
+      {sessionDetails && (
+        <SessionDetails
+          session={sessionDetails}
+          active={proxy.running && proxy.sessionId === sessionDetails.id}
+          onClose={() => setSessionDetails(null)}
+          onUpdated={(session) => {
+            setSessions((all) => all.map((s) => (s.id === session.id ? session : s)));
+            setNotice('Session details saved.');
+          }}
+          onDeleted={(id) => {
+            setSessions((all) => all.filter((s) => s.id !== id));
+            if (sessionId === id) setSessionId(sessions.find((s) => s.id !== id)?.id || '');
+            setMcp((m) => ({ ...m, sessionIds: m.sessionIds.filter((s) => s !== id) }));
+            setNotice('Session deleted.');
+          }}
+        />
+      )}
+      {replayDraft && (
+        <ReplayComposer
+          exchange={replayDraft}
+          onClose={() => setReplayDraft(null)}
+          onSend={(edit) => {
+            const id = replayDraft.id;
+            setReplayingId(id);
+            setReplayDraft(null);
+            setError('');
+            void api
+              .replay(id, edit)
+              .then(async (replayed) => {
+                await refreshSessions();
+                if (sessionIdRef.current === replayed.sessionId) setSelected(replayed);
+                setNotice('Replay completed. Current traffic rules were applied.');
+              })
+              .catch((e) => setError(errorText(e)))
+              .finally(() => setReplayingId(''));
+          }}
+        />
       )}
       {newSession && (
         <NewSessionModal
@@ -1174,14 +1318,14 @@ function RequestInspector({
           <span className={`method method-${selected.method.toLowerCase()}`}>
             {selected.method}
           </span>
-          <Status code={selected.status} error={selected.error} />
+          <Status code={selected.status} error={selected.error} completed={selected.completed} />
           <span className="summary-time">{ms(selected.durationMs)}</span>
         </div>
         <h3 title={selected.url}>{url.host}</h3>
         <p title={selected.url}>{url.path}</p>
         <div className="request-summary-actions">
           <button className="button small" onClick={onReplay} disabled={busy}>
-            <RotateCcw size={13} /> Replay request
+            <RotateCcw size={13} /> Compose replay
           </button>
           <IconButton
             label="Copy request URL"
@@ -1191,7 +1335,29 @@ function RequestInspector({
           </IconButton>
         </div>
       </div>
-      {selected.error && <div className="request-error">{selected.error}</div>}
+      {selected.completed !== false && selected.error && (
+        <div className="request-error">{selected.error}</div>
+      )}
+      {(selected.provenance === 'mock' ||
+        selected.provenance === 'blocked' ||
+        !!selected.appliedRules?.length) && (
+        <div className="exchange-rule-history">
+          <strong>
+            {selected.provenance === 'mock'
+              ? 'Mock response'
+              : selected.provenance === 'blocked'
+                ? 'Blocked by a rule'
+                : 'Traffic rules applied'}
+          </strong>
+          {selected.appliedRules?.map((rule, i) => (
+            <span key={`${rule.ruleId}-${i}`}>
+              <GitBranch size={11} />
+              {rule.name}
+              <small>{rule.stage}</small>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="message-toggle">
         <button className={side === 'request' ? 'active' : ''} onClick={() => setSide('request')}>
           <ArrowUpFromLine size={13} /> Request
@@ -1783,7 +1949,7 @@ function McpPanel({
   busy: string;
   native: boolean;
   onClose: () => void;
-  onUpdate: (ids: string[], writes: boolean) => void;
+  onUpdate: (ids: string[], writes: boolean, rules?: boolean, diagnostics?: boolean) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const config = boot?.mcpConfig
@@ -1879,6 +2045,65 @@ function McpPanel({
                 className={`switch ${mcp.allowWrites ? 'on' : ''}`}
                 disabled={!native || !!busy}
                 onClick={() => onUpdate(mcp.sessionIds, !mcp.allowWrites)}
+              >
+                <span />
+              </button>
+            </div>
+            <div className="permission-row">
+              <div>
+                <strong>Allow global traffic rules</strong>
+                <span>
+                  View rules across the workspace. Mutations also require traffic changes.
+                </span>
+              </div>
+              <button
+                role="switch"
+                aria-checked={!!mcp.allowRules}
+                aria-label="Allow MCP global rules"
+                className={`switch ${mcp.allowRules ? 'on' : ''}`}
+                disabled={!native || !!busy}
+                onClick={() =>
+                  onUpdate(
+                    mcp.sessionIds,
+                    mcp.allowWrites,
+                    !mcp.allowRules,
+                    !!mcp.allowDeviceDiagnostics,
+                  )
+                }
+              >
+                <span />
+              </button>
+            </div>
+            {mcp.allowRules && (
+              <div className="info-callout">
+                <Info size={15} />
+                <p>
+                  Rules are global. A changed rule can affect every capture, including sessions that
+                  are not shared with the agent.
+                </p>
+              </div>
+            )}
+            <div className="permission-row">
+              <div>
+                <strong>Allow device diagnostics</strong>
+                <span>
+                  Read-only checks expose connected device identifiers and local runtime paths.
+                </span>
+              </div>
+              <button
+                role="switch"
+                aria-checked={!!mcp.allowDeviceDiagnostics}
+                aria-label="Allow MCP device diagnostics"
+                className={`switch ${mcp.allowDeviceDiagnostics ? 'on' : ''}`}
+                disabled={!native || !!busy}
+                onClick={() =>
+                  onUpdate(
+                    mcp.sessionIds,
+                    mcp.allowWrites,
+                    !!mcp.allowRules,
+                    !mcp.allowDeviceDiagnostics,
+                  )
+                }
               >
                 <span />
               </button>

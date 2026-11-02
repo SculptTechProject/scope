@@ -1,6 +1,22 @@
 # Changelog
 
-User-visible changes are recorded here. The project is in alpha; interfaces and archive schemas may evolve. Back up important captures before upgrading.
+User-visible changes are recorded here. Back up important captures before upgrading.
+
+## 1.0.0 — proposed, not published
+
+- Persistent ordered request/response rewrites, mock responses and blocking, with validated atomic updates and per-request rule snapshots.
+- Applied-rule evidence, upstream/mock/blocked provenance and preserved original messages, including HAR/native roundtrips.
+- Replay composer for method, destination, full repeated headers and body. Current rules apply; manual breakpoints are bypassed.
+- Session rename, notes, normalized tags, pins and deletion with active capture protection; metadata survives native archives.
+- Explicit in-flight/completed state and interrupted-capture recovery. Analysis excludes unfinished transfers from errors and latency.
+- Read-only Android/Frida preflight with root/authorization/ABI/version/mapping/recovery evidence and actionable failure messages.
+- Observed-only OpenAPI 3.1 inference with bounded schemas, no example values and explicit provenance/limits.
+- Twelve MCP tools, separate global-rule and diagnostics permissions, edited replay and default-deny writes. Access resets on restart.
+- Optional lossy sanitized export, plus a bounded local metadata-only audit journal.
+- Native maintainer review requirements, CODEOWNERS, stale approval dismissal and cross-platform PR builds.
+- Public issue research and a roadmap that distinguishes delivered behavior from future work.
+
+Verification results and remaining platform/dependency limits: [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## v0.1.0-alpha.1 — 2026-11-02
 

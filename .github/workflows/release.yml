@@ -1,18 +1,51 @@
-name: Prepare draft release
+name: Prepare review or draft release
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Open a review proposal, or build an existing tag into a draft
+        type: choice
+        options: [draft, proposal]
+        default: draft
+        required: true
       tag:
         description: Existing version tag to build
         required: true
-        default: v0.1.0-alpha.1
+        default: v1.0.0
 permissions:
   contents: read
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: release-${{ inputs.mode }}-${{ inputs.tag }}
   cancel-in-progress: false
 jobs:
+  proposal:
+    name: Open maintainer review
+    if: inputs.mode == 'proposal'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PROPOSAL_BRANCH: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Open draft pull request as the Actions bot
+        shell: bash
+        run: |
+          test "$PROPOSAL_BRANCH" = 'release/1.0.0' || { echo 'Proposal requires release/1.0.0'; exit 1; }
+          existing=$(gh pr list --head "$PROPOSAL_BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+          if test -n "$existing"; then
+            echo "Review proposal already exists: #$existing"
+          else
+            gh pr create --draft --base main --head "$PROPOSAL_BRANCH" --title 'Scope 1.0.0: traffic rules, replay, diagnostics and MCP' --body-file docs/releases/1.0.0-review.md
+          fi
   build:
+    if: inputs.mode != 'proposal'
     name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -47,10 +80,16 @@ jobs:
       - run: npm ci
       - run: cargo fmt --all -- --check
       - run: cargo test --workspace --locked
+      - run: npm test -- --run
       - run: node --test scripts/release.test.mjs
       - run: python -m unittest discover -s resources/device/tests
       - run: npm audit --audit-level=high
       - run: npm run package
+      - name: Exercise real desktop engine and stdio MCP
+        run: node scripts/smoke.mjs
+        env:
+          SCOPE_BIN: target/release/scope${{ runner.os == 'Windows' && '.exe' || '' }}
+          SCOPE_MCP_BIN: target/release/scope-mcp${{ runner.os == 'Windows' && '.exe' || '' }}
       - name: Stage release assets
         shell: bash
         run: node scripts/release-assets.mjs "$RELEASE_TAG"
@@ -81,7 +120,7 @@ jobs:
           if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > existing-state.txt 2>/dev/null; then
             test "$(cat existing-state.txt)" = true || { echo 'Release is already public; review CI artifacts manually.'; exit 1; }
           else
-            printf '%s\n' 'Alpha build. Frida runtime is installed separately with the shipped setup helper. macOS arm64 was manually tested; Windows/Linux assets require runtime review before publication. See repository docs/RELEASING.md and docs/DEPENDENCIES.md.' > release-notes.txt
+            printf '%s\n' 'Review candidate. Frida is installed separately with the shipped setup helper. Platform builds require runtime review before publication. See docs/RELEASING.md, docs/VERIFICATION.md and docs/DEPENDENCIES.md.' > release-notes.txt
             gh release create "$RELEASE_TAG" --draft --prerelease --title "Scope $RELEASE_TAG" --notes-file release-notes.txt
           fi
       - name: Combine checksums and upload draft assets

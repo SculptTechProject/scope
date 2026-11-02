@@ -67,7 +67,31 @@ Use the session export controls to save:
 - **HAR** for interoperability with other HTTP tools.
 - **Scope session** (`.scope.json`) for a lossless Scope archive, including Scope-specific metadata and original edited messages.
 
-Import creates a separate session. Exports contain the original captured data, including credentials and body content; MCP redaction does not sanitize archive files.
+Import creates a separate session. Ordinary exports contain captured credentials
+and body content. The separate **sanitized** option masks known credential fields,
+omits binary/non-JSON bodies and session notes/tags, and marks the file as lossy.
+Review URLs and application-specific fields before sharing. MCP redaction does
+not change the raw archive. OpenAPI export contains observed shapes without
+payload examples; its documented limits mean it is not a full API contract.
+
+Open the session controls to rename, add notes/tags, pin or delete. Deleting
+requires the confirmation shown by the app and is rejected while that session
+is actively capturing. Deletion removes the local session and exchanges, not
+files previously exported elsewhere.
+
+## Automate a local mock
+
+Open **Rules** and create a disabled mock for `GET`, host `127.0.0.1`, path prefix
+`/api/products`, status `503`, JSON content type and `{"maintenance":true}` body.
+Save, then enable it and send a request through the capture proxy. The response
+comes from the rule without contacting the upstream endpoint; the row records
+mock provenance and the applied rule. Disable or remove it to restore normal
+traffic. Rules are global across sessions. [Ordering and format](RULES.md)
+
+Use **Replay** to compose a separate request with edited method, URL, full headers
+or body. Review credentials before changing destination. Replay follows current
+rules and bypasses manual breakpoint pauses. **Activity** records local event
+metadata without copying traffic bodies or credential headers into a second log.
 
 The connection/settings view displays the data directory. It contains `scope.sqlite3`, Scope's public CA and private key, MCP bridge configuration, and device recovery state. The SQLite database is not encrypted by Scope. For a consistent filesystem backup, stop capture and quit the app before copying the directory. Do not publish that directory.
 

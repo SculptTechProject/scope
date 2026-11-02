@@ -11,7 +11,12 @@ Requirements: Node.js 22.13+ with built-in `node:sqlite` (Node.js 24 LTS recomme
 
 Keep ports **17890** and **17891** free; the demo uses them. The authenticated MCP bridge and the credential fixture use ephemeral localhost ports. If a demo is already running, the test reports the busy port without stopping that process.
 
-The script launches the real headless desktop engine and real `scope-mcp` process. It performs MCP protocol negotiation (`2025-11-25`), initializes the client, lists all seven tools, reads six actual demo captures, computes analysis, and verifies that unauthenticated bridge access, unshared session access, cross-scope comparison and replay without write access are denied.
+The script launches the real headless desktop engine and real `scope-mcp` process.
+It negotiates MCP (`2025-11-25`), lists twelve tools, reads six real demo captures,
+computes analysis and an observed OpenAPI document, and checks authentication,
+session scope, comparison scope and default denial of replay, global rules and
+device diagnostics. Rust bridge tests exercise opt-in global rule writes, revoke
+behavior and redacted inventories; device fixtures separately check read-only probes.
 
 It then sends a real HTTP request through the proxy using `curl` to a temporary local fixture. Synthetic secrets appear in authorization/cookie/custom headers, URL query parameters and nested JSON request/response bodies. The test verifies that MCP redacts them while preserving public evidence, and checks that the original local bodies are stored in SQLite. After stopping and reopening the engine with the **same data directory**, it verifies that all seven exchanges remain on disk and that the previously shared real session is inaccessible to MCP until shared again.
 

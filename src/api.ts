@@ -1,6 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
   Analysis,
+  AuditEvent,
+  DeviceDiagnostics,
+  SessionUpdate,
+  TrafficRule,
   App,
   Bootstrap,
   Comparison,
@@ -21,6 +25,16 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   return invoke<T>('scope_command', { command, args: args || {} });
 }
 export const api = {
+  list_rules: () => call<TrafficRule[]>('list_rules'),
+  save_rule: (rule: TrafficRule) => call<TrafficRule>('save_rule', { rule }),
+  delete_rule: (id: string) => call<void>('delete_rule', { id }),
+  update_session: (id: string, update: SessionUpdate) =>
+    call<Session>('update_session', { id, update }),
+  delete_session: (id: string) => call<void>('delete_session', { id }),
+  list_audit: (limit = 200) => call<AuditEvent[]>('list_audit', { limit }),
+  device_diagnostics: (serial?: string) =>
+    call<DeviceDiagnostics>('device_diagnostics', { serial }),
+  infer_openapi: (sessionId: string) => call<unknown>('infer_openapi', { sessionId }),
   bootstrap: () => call<Bootstrap>('bootstrap'),
   list_sessions: () => call<Session[]>('list_sessions'),
   create_session: (name: string, source = 'desktop') =>
@@ -29,8 +43,8 @@ export const api = {
     call<Exchange[]>('list_exchanges', { sessionId, query: query || undefined, limit, offset }),
   get_exchange: (id: string) => call<Exchange>('get_exchange', { id }),
   analysis: (sessionId: string) => call<Analysis>('analysis', { sessionId }),
-  save_export: (sessionId: string, format: 'har' | 'scope') =>
-    call<{ saved: boolean; path?: string }>('save_export', { sessionId, format }),
+  save_export: (sessionId: string, format: 'har' | 'scope' | 'openapi', redact = false) =>
+    call<{ saved: boolean; path?: string }>('save_export', { sessionId, format, redact }),
   export_har: (sessionId: string) => call<unknown>('export_har', { sessionId }),
   import_har: (content: string, name: string) => call<Session>('import_har', { content, name }),
   export_session: (sessionId: string) => call<unknown>('export_session', { sessionId }),
@@ -53,7 +67,12 @@ export const api = {
     call<DeviceStatus>('start_device', { serial, package: packageName, mode, profile }),
   stop_device: () => call<DeviceStatus>('stop_device'),
   device_status: () => call<DeviceStatus>('device_status'),
-  set_mcp_scope: (sessionIds: string[], allowWrites: boolean) =>
-    call<unknown>('set_mcp_scope', { sessionIds, allowWrites }),
+  set_mcp_scope: (
+    sessionIds: string[],
+    allowWrites: boolean,
+    allowRules = false,
+    allowDeviceDiagnostics = false,
+  ) =>
+    call<unknown>('set_mcp_scope', { sessionIds, allowWrites, allowRules, allowDeviceDiagnostics }),
   generate_demo: (sessionId: string) => call<unknown>('generate_demo', { sessionId }),
 };

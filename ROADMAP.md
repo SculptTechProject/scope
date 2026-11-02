@@ -1,6 +1,18 @@
 # Roadmap
 
-Scope is an alpha built around a complete loop: select a target, capture, inspect/edit, save, reopen and analyze. This roadmap is a direction, not a delivery schedule. Proposals are welcome through [feature requests](https://github.com/SculptTechProject/scope/issues/new?template=feature_request.yml).
+Scope is built around a complete loop: select a target, capture, inspect/change,
+save, reopen and analyze. 1.0.0 is a review proposal, not a published release.
+This roadmap is a direction, not a delivery schedule. [Public issue research](docs/USER-NEEDS.md)
+links specific user needs to work that is delivered or still planned.
+
+## Proposed in 1.0.0
+
+- Ordered persistent rewrite/mock/block rules with original messages and provenance.
+- Edited replay; session notes/tags/pins/deletion; local metadata-only activity.
+- Read-only Android/Frida preflight and actionable setup diagnostics.
+- Observed OpenAPI schemas, pending-aware analysis and optional sanitized exports.
+- Twelve MCP tools with explicit session/write/global-rule/diagnostics permissions.
+- Required maintainer review and platform build checks before merge.
 
 ## Next: make the first release dependable
 
@@ -13,15 +25,18 @@ Scope is an alpha built around a complete loop: select a target, capture, inspec
 ## Capture and archive
 
 - Bounded streaming/body storage for large messages and long captures.
-- Session retention, deletion and efficient indexed search.
+- Configurable retention and efficient indexed search (manual deletion exists in 1.0).
+- Streaming export, progress/cancellation, size estimates and measured memory bounds for large archives.
+- Reliable per-request source identity before claiming concurrent multi-device attribution.
 - WebSocket frame inspection and replay where technically meaningful.
 - Better handling of additional HTTP features and Android native networking stacks, with tests per supported path.
 
 ## Understand and automate
 
-- Reusable interception rules and mock responses.
+- Portable, versioned rule collections with safe import/export and reusable fixtures.
 - More useful traffic comparison with clear evidence links and fewer noisy field differences.
-- Configurable redaction before sharing or exporting; review of custom secret fields.
+- Configurable custom secret fields beyond 1.0's best-effort known-field sanitizer.
+- Explicit custom instrumentation scripts with source/license review and recovery tests.
 - MCP capabilities that preserve explicit session scope and distinguish read-only analysis from traffic changes.
 
 ## Principles for accepting scope

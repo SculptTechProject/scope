@@ -1,5 +1,11 @@
 use anyhow::{bail, Context, Result};
-use std::{collections::HashSet, env, path::PathBuf, process::Stdio, time::Duration};
+use std::{
+    collections::HashSet,
+    env,
+    path::{Path, PathBuf},
+    process::Stdio,
+    time::Duration,
+};
 use tokio::process::Command;
 
 pub fn discover_adb() -> PathBuf {
@@ -26,7 +32,16 @@ pub fn discover_adb() -> PathBuf {
         .unwrap_or_else(|| binary.into())
 }
 
-pub async fn run(adb: &PathBuf, serial: Option<&str>, args: &[&str]) -> Result<String> {
+pub async fn run(adb: &Path, serial: Option<&str>, args: &[&str]) -> Result<String> {
+    run_timeout(adb, serial, args, Duration::from_secs(35)).await
+}
+
+pub async fn run_timeout(
+    adb: &Path,
+    serial: Option<&str>,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<String> {
     let mut command = Command::new(adb);
     if let Some(serial) = serial {
         validate_serial(serial)?;
@@ -35,9 +50,9 @@ pub async fn run(adb: &PathBuf, serial: Option<&str>, args: &[&str]) -> Result<S
     command.args(args).stdin(Stdio::null()).kill_on_drop(true);
     #[cfg(windows)]
     command.creation_flags(0x08000000);
-    let output = tokio::time::timeout(Duration::from_secs(35), command.output())
+    let output = tokio::time::timeout(timeout, command.output())
         .await
-        .context("ADB command timed out after 35 seconds")?
+        .with_context(|| format!("ADB command timed out after {} seconds", timeout.as_secs()))?
         .with_context(|| {
             format!(
                 "Cannot run ADB at {}. Install Android platform-tools or set SCOPE_ADB",
@@ -45,10 +60,16 @@ pub async fn run(adb: &PathBuf, serial: Option<&str>, args: &[&str]) -> Result<S
             )
         })?;
     if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let detail = if stderr.is_empty() {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        } else {
+            stderr
+        };
         bail!(
             "ADB {} failed: {}",
             args.first().unwrap_or(&"command"),
-            String::from_utf8_lossy(&output.stderr).trim()
+            detail
         );
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
@@ -106,7 +127,11 @@ pub fn parse_devices(text: &str) -> Vec<crate::Device> {
             Some(crate::Device {
                 serial: fields[0].into(),
                 model,
-                state: fields[1].into(),
+                state: if fields[1] == "no" && fields.get(2) == Some(&"permissions") {
+                    "no permissions".into()
+                } else {
+                    fields[1].into()
+                },
                 rooted: false,
             })
         })
