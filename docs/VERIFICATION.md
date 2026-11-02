@@ -40,3 +40,17 @@ These checks establish a local functional alpha, not universal Android compatibi
 The standalone Frida worker/server checks above used a development bundle. The public `v0.1.0-alpha.1` package deliberately omits these optional native binaries because a complete artifact-specific Frida dependency notice inventory has not been established. Users can install the optional runtime locally; source integration and profiles remain included. See [Android setup](ANDROID.md#frida-runtime), [release procedure](RELEASING.md), and [third-party notices](../THIRD_PARTY_NOTICES.md).
 
 Publication and CI status are recorded by [GitHub Releases](https://github.com/SculptTechProject/scope/releases) and [Actions](https://github.com/SculptTechProject/scope/actions), separately from the local checks above.
+
+## Public alpha preparation
+
+Additional checks on the public macOS arm64 bundle:
+
+- All **16 Rust workspace tests**, strict workspace Clippy (`--all-targets --locked -- -D warnings`), TypeScript and production builds passed.
+- **Two Node release-resource tests** and **three Python installer tests** passed. The installer rejects a corrupt server download before writing an executable.
+- Actual bundled resources were inspected: optional Frida/Python native binaries, capture archives, private CA keys and MCP bridge tokens are absent. Scope's license, dependency notices and source setup helper are present.
+- `codesign --verify --deep --strict` passed after the packaging helper signed the complete final bundle with a local **ad-hoc** signature. It is not Apple Developer signed/notarized.
+- `scripts/smoke.mjs` ran against the desktop and MCP executables **inside that public app bundle**. Real capture reads, seven MCP tools, authentication, session access, credential redaction, default replay denial, shutdown and persisted archive/restart isolation passed.
+- Gitleaks 8.30.1 scanned the complete committed source history with no detected secrets. Build products are excluded from the source archive.
+- The three [screenshots](SCREENSHOTS.md) are actual native captures. A replay/breakpoint UI deadlock and a replay selection race were corrected during release preparation; TypeScript/build and code review passed. The final UI interaction was not manually repeated because the host became locked. Earlier native response-editing verification and core breakpoint/replay network tests remain the recorded functional evidence.
+
+See [release preparation](RELEASING.md) and [dependency findings](DEPENDENCIES.md) for artifact and platform boundaries.

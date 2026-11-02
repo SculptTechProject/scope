@@ -4,7 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
       rust-patch-minor:
         update-types: [minor, patch]
@@ -12,7 +15,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
       frontend-patch-minor:
         update-types: [minor, patch]
