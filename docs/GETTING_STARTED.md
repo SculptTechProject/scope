@@ -6,9 +6,9 @@ Scope stores captures locally and works without an account. Start with the inclu
 
 1. Download the artifact for your host from [GitHub Releases](https://github.com/SculptTechProject/scope/releases). Read its release notes for architecture, optional Frida resources and signing status.
 2. Compare its SHA-256 with the release checksum file, then extract the archive or run the platform installer.
-3. On macOS, move `Scope.app` to Applications and open it. The first alpha is not notarized with an Apple Developer certificate. If Gatekeeper blocks it, use macOS **System Settings → Privacy & Security → Open Anyway** after verifying the source and checksum. Do not disable Gatekeeper globally.
+3. On macOS, move `Scope.app` to Applications and open it. The 1.0.0 package is ad-hoc signed without Apple notarization. If Gatekeeper blocks it, use macOS **System Settings → Privacy & Security → Open Anyway** after verifying the source and checksum. Do not disable Gatekeeper globally.
 
-The initial public artifact is **macOS arm64** (Apple Silicon). Optional Frida native binaries are not included in this public package; [install them locally](ANDROID.md#frida-runtime) for Frida mode. A build artifact from another platform is not proof that Android interception has been exercised on that platform.
+The interactively tested host is **macOS arm64** (Apple Silicon). Windows x64 and Linux x64 have CI build/headless-protocol coverage; their interactive installers, desktop and device behavior remain unverified. Read the release notes for Linux's known dependency advisory. Optional Frida native binaries are not included in public packages; [install them locally](ANDROID.md#frida-runtime) for Frida mode.
 
 ## Capture local test traffic
 
@@ -67,7 +67,31 @@ Use the session export controls to save:
 - **HAR** for interoperability with other HTTP tools.
 - **Scope session** (`.scope.json`) for a lossless Scope archive, including Scope-specific metadata and original edited messages.
 
-Import creates a separate session. Exports contain the original captured data, including credentials and body content; MCP redaction does not sanitize archive files.
+Import creates a separate session. Ordinary exports contain captured credentials
+and body content. The separate **sanitized** option masks known credential fields,
+omits binary/non-JSON bodies and session notes/tags, and marks the file as lossy.
+Review URLs and application-specific fields before sharing. MCP redaction does
+not change the raw archive. OpenAPI export contains observed shapes without
+payload examples; its documented limits mean it is not a full API contract.
+
+Open the session controls to rename, add notes/tags, pin or delete. Deleting
+requires the confirmation shown by the app and is rejected while that session
+is actively capturing. Deletion removes the local session and exchanges, not
+files previously exported elsewhere.
+
+## Automate a local mock
+
+Open **Rules** and create a disabled mock for `GET`, host `127.0.0.1`, path prefix
+`/api/products`, status `503`, JSON content type and `{"maintenance":true}` body.
+Save, then enable it and send a request through the capture proxy. The response
+comes from the rule without contacting the upstream endpoint; the row records
+mock provenance and the applied rule. Disable or remove it to restore normal
+traffic. Rules are global across sessions. [Ordering and format](RULES.md)
+
+Use **Replay** to compose a separate request with edited method, URL, full headers
+or body. Review credentials before changing destination. Replay follows current
+rules and bypasses manual breakpoint pauses. **Activity** records local event
+metadata without copying traffic bodies or credential headers into a second log.
 
 The connection/settings view displays the data directory. It contains `scope.sqlite3`, Scope's public CA and private key, MCP bridge configuration, and device recovery state. The SQLite database is not encrypted by Scope. For a consistent filesystem backup, stop capture and quit the app before copying the directory. Do not publish that directory.
 

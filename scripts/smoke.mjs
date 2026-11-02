@@ -245,7 +245,7 @@ class McpClient {
   }
 }
 
-async function openFixture(secret) {
+async function openFixture(fixtureMarker) {
   fixture = createHttpServer(async (request, response) => {
     try {
       const parts = [];
@@ -253,16 +253,16 @@ async function openFixture(secret) {
       const body = JSON.parse(Buffer.concat(parts).toString('utf8'));
       response.writeHead(200, {
         'Content-Type': 'application/json',
-        'Set-Cookie': [`session=${secret}-response-cookie; HttpOnly`, 'public=ok'],
-        'X-Auth': `${secret}-response-auth`,
+        'Set-Cookie': [`session=${fixtureMarker}-response-cookie; HttpOnly`, 'public=ok'],
+        'X-Auth': `${fixtureMarker}-response-auth`,
         'X-Scope-Evidence': 'fixture-response',
       });
       response.end(
         JSON.stringify({
           publicEvidence: 'fixture-response',
           count: 7,
-          access_token: `${secret}-response-token`,
-          nested: { password: `${secret}-response-password` },
+          access_token: `${fixtureMarker}-response-token`,
+          nested: { password: `${fixtureMarker}-response-password` },
           echo: body,
         }),
       );
@@ -328,6 +328,11 @@ try {
     'analyze_session',
     'compare_sessions',
     'replay_request',
+    'infer_openapi',
+    'list_rules',
+    'save_rule',
+    'delete_rule',
+    'device_diagnostics',
   ])
     assert.ok(
       tools.tools.some((item) => item.name === tool),
@@ -345,6 +350,12 @@ try {
   const analysis = await mcp.tool('analyze_session', { sessionId });
   assert.equal(analysis.totalRequests, 6);
   assert.equal(analysis.totalErrors, 1);
+  assert.equal(analysis.inFlightRequests, 0);
+  const openapi = await mcp.tool('infer_openapi', { sessionId });
+  assert.match(openapi.openapi, /^3\.1\./);
+  assert.ok(Object.keys(openapi.paths).length >= 1);
+  assert.match(await mcp.tool('list_rules', {}, true), /rule access is disabled/i);
+  assert.match(await mcp.tool('device_diagnostics', {}, true), /diagnostics access is disabled/i);
   assert.match(await mcp.tool('replay_request', { id: one.id }, true), /replay is disabled/i);
   assert.match(await mcp.tool('search_requests', { sessionId: randomUUID() }, true), /not shared/i);
   assert.match(
@@ -352,15 +363,17 @@ try {
     /both sessions must be shared/i,
   );
   console.log(
-    'PASS desktop + MCP initialization, seven tools, real capture reads, analysis, authentication, scope checks and replay denial',
+    'PASS desktop + MCP initialization, twelve tools, capture reads, observed OpenAPI, authentication, scope/rule/diagnostic gates and replay denial',
   );
 
-  const secret = `scope-smoke-secret-${randomUUID()}`;
-  const target = await openFixture(secret);
+  // Random fixture evidence, never a real credential or an authentication key.
+  // Credential-shaped fields intentionally exercise redaction across the real proxy.
+  const fixtureMarker = `scope-smoke-fixture-${randomUUID()}`;
+  const target = await openFixture(fixtureMarker);
   const body = JSON.stringify({
     publicEvidence: 'fixture-request',
-    token: `${secret}-request-token`,
-    nested: [{ client_secret: `${secret}-request-secret`, keep: 42 }],
+    token: `${fixtureMarker}-request-token`,
+    nested: [{ client_secret: `${fixtureMarker}-request-secret`, keep: 42 }],
   });
   const curl = await runFile(
     'curl',
@@ -379,32 +392,38 @@ try {
       '--header',
       'Content-Type: application/json',
       '--header',
-      `Authorization: Bearer ${secret}-authorization`,
+      `Authorization: Bearer ${fixtureMarker}-authorization`,
       '--header',
-      `Cookie: session=${secret}-request-cookie`,
+      `Cookie: session=${fixtureMarker}-request-cookie`,
       '--header',
-      `X-Access-Key: ${secret}-access-key`,
+      `X-Access-Key: ${fixtureMarker}-access-key`,
       '--header',
-      `X-Session-Id: ${secret}-session-id`,
+      `X-Session-Id: ${fixtureMarker}-session-id`,
       '--data-binary',
       body,
-      `${target}?token=${encodeURIComponent(`${secret}-query`)}&public=keep`,
+      `${target}?token=${encodeURIComponent(`${fixtureMarker}-query`)}&public=keep`,
     ],
     { timeout: 20_000, maxBuffer: 1024 * 1024, windowsHide: true },
   );
   assert.ok(
-    curl.stdout.includes(secret),
+    curl.stdout.includes(fixtureMarker),
     'Fixture must actually receive and return the synthetic secret',
   );
   const matches = await mcp.tool('search_requests', { sessionId, query: 'scope-smoke-redaction' });
   assert.equal(matches.length, 1);
-  assert.ok(!JSON.stringify(matches).includes(secret), 'MCP request metadata leaked a credential');
+  assert.ok(
+    !JSON.stringify(matches).includes(fixtureMarker),
+    'MCP request metadata leaked a credential',
+  );
   assert.ok(
     !('requestBody' in matches[0]) && !('responseBody' in matches[0]),
     'Search results must omit bodies',
   );
   const exchange = await mcp.tool('get_request', { id: matches[0].id });
-  assert.ok(!JSON.stringify(exchange).includes(secret), 'MCP detailed request leaked a credential');
+  assert.ok(
+    !JSON.stringify(exchange).includes(fixtureMarker),
+    'MCP detailed request leaked a credential',
+  );
   assert.ok(
     !('originalRequest' in exchange) && !('originalResponse' in exchange),
     'MCP must omit raw original snapshots',
@@ -423,9 +442,25 @@ try {
   assert.equal(persisted.length, 7);
   const raw = persisted.find((row) => row.id === exchange.id);
   assert.ok(
-    raw.requestBody.includes(secret) && raw.responseBody.includes(secret),
+    raw.requestBody.includes(fixtureMarker) && raw.responseBody.includes(fixtureMarker),
     'Raw local bodies must be persisted, while MCP alone redacts its view',
   );
+  for (const [side, name] of [
+    ['requestHeaders', 'cookie'],
+    ['responseHeaders', 'set-cookie'],
+  ]) {
+    const rawCookies = raw[side].filter((header) => header.name.toLowerCase() === name);
+    const sharedCookies = exchange[side].filter((header) => header.name.toLowerCase() === name);
+    assert.ok(
+      rawCookies.some((header) => header.value.includes(fixtureMarker)),
+      'The local archive must actually contain the synthetic cookie fixture',
+    );
+    assert.equal(sharedCookies.length, rawCookies.length);
+    assert.ok(
+      sharedCookies.every((header) => header.value === '[redacted]'),
+      'MCP must redact every captured cookie header value',
+    );
+  }
   console.log(
     'PASS real proxied request, metadata/query/header/JSON credential redaction and retained public evidence',
   );

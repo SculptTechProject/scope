@@ -1,9 +1,26 @@
 # Releasing Scope
 
-The first public prerelease is `v0.1.0-alpha.1`; the application version remains
-`0.1.0`. Repository: [SculptTechProject/scope](https://github.com/SculptTechProject/scope).
-The manually tested public target is macOS Apple Silicon. Windows/Linux builds
-are CI candidates until their installers and runtime behavior are reviewed.
+## Review, tag and publication
+
+The `release/1.0.0` branch carries the 1.0.0 changes. Opening a proposal does not
+create a tag or a public release. [Governance](GOVERNANCE.md) describes the required
+maintainer review and bot-authored PR, which lets the maintainer use native
+GitHub approval. Dispatch `release.yml` on this branch with `mode: proposal`
+to open that PR. This mode skips all release build/upload jobs.
+
+After review and successful required checks, merge the PR and tag the reviewed
+main commit. Dispatch the same workflow with `mode: draft` and `tag: v1.0.0` to
+build the existing tag into a draft prerelease. Inspect the assets and use
+[the 1.0.0 release notes](releases/1.0.0.md) as the publication body. Publication
+is a separate maintainer action; for a stable release, clear both the draft and
+prerelease flags. Keep historical release assets attached to their original tags.
+
+The first public prerelease, `v0.1.0-alpha.1`, used application version `0.1.0`;
+the 1.0.0 source uses application version `1.0.0`.
+Repository: [SculptTechProject/scope](https://github.com/SculptTechProject/scope).
+The interactively tested host is macOS Apple Silicon. Windows/Linux packages
+have CI build and headless-protocol coverage; their interactive installers and
+desktop/device behavior remain experimental and must be labeled accordingly.
 
 ## Public artifact boundary
 
@@ -17,7 +34,7 @@ configuration. Local ignored Frida binaries remain untouched outside that stage.
 Frida's exact 17.9.1 SDK manifest contains more than 30 native projects, including
 LGPL libraries and V8. Complete artifact-specific notices and corresponding-source
 requirements were not established for the prior local prebuilt experiment.
-Those native files are therefore not redistributed in this public alpha. See
+Those native files are therefore not redistributed in public packages. See
 the [runtime provenance record](../resources/device/licenses/README.md).
 
 Users can explicitly install Frida from upstream into Scope's private user runtime.
@@ -50,6 +67,7 @@ Use Node **22.22.3**, Rust **1.99.1** and the committed `package-lock.json` and
 npm ci
 cargo fmt --all -- --check
 cargo test --workspace --locked
+npm test -- --run
 node --test scripts/release.test.mjs
 python3 -m unittest discover -s resources/device/tests
 npm audit --audit-level=high
@@ -68,7 +86,7 @@ Dependency security findings, including platform-specific warnings, are recorded
 in [DEPENDENCIES.md](DEPENDENCIES.md). A passing build is not a claim that those
 warnings or platform runtime checks are resolved.
 
-The first macOS app is ad-hoc signed, without Apple notarization. Do not describe
+The 1.0.0 macOS app is ad-hoc signed, without Apple notarization. Do not describe
 it as notarized. Verify the final `.app` signature and launch the packaged app,
 then perform a real local capture, reopen its archive and inspect MCP behavior.
 Use [VERIFICATION.md](VERIFICATION.md) to distinguish tests already run from
@@ -81,13 +99,13 @@ before preparing release assets. The helper refuses a dirty tracked checkout or
 a mismatched tag, preventing a source archive from describing different code.
 
 ```sh
-node scripts/release-assets.mjs v0.1.0-alpha.1
+node scripts/release-assets.mjs v1.0.0
 ```
 
 On macOS this produces:
 
-- `Scope-v0.1.0-alpha.1-macOS-arm64.zip`, preserving the app bundle with `ditto`;
-- `Scope-v0.1.0-alpha.1-source.zip`, produced by `git archive` from the exact tag;
+- `Scope-v1.0.0-macOS-arm64.zip`, preserving the app bundle with `ditto`;
+- `Scope-v1.0.0-source.zip`, produced by `git archive` from the exact tag;
 - platform checksums and a build manifest recording the commit and exclusion of
   optional Frida binaries.
 
@@ -98,8 +116,9 @@ recovery state. Source archives contain tracked files only, so ignored local
 runtime binaries, data and build products are excluded.
 
 Combine checksums into `SHA256SUMS.txt` and verify them against the final files
-before uploading. Publish only assets whose target platform has been reviewed.
-Do not reuse a package generated before the latest source/notice changes.
+before uploading. Review each target's build results and clearly disclose any
+remaining interactive-runtime limitations. Do not reuse a package generated
+before the latest source/notice changes.
 
 ## CI and draft workflow
 
@@ -108,13 +127,17 @@ commit-pinned actions and locked package dependencies. It checks Rust formatting
 workspace tests, the release filter, setup integrity tests, npm security findings
 and native packaging. It uploads build artifacts; it does not publish releases.
 
-`release.yml` is manually dispatched with an existing version tag. It checks and
+`release.yml` in draft mode is manually dispatched with an existing version tag. It checks and
 builds macOS arm64, Windows x64 and Linux x64 packages, creates source/checksum
 assets, then uploads them to a **draft prerelease**. It refuses to modify an
 already public release. A maintainer reviews CI results and platform limitations
 before publishing any draft assets; the workflow never automatically publishes
 the draft. The currently selected macOS runner architecture is documented by
 [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+The helper and workflow require an existing `refs/tags/...` reference matching
+the clean checked-out commit. A similarly named branch is rejected; draft
+creation uses `--verify-tag` so GitHub cannot silently tag a different commit.
 
 The helper and workflow do not push commits or create tags. The maintainer remains
 responsible for choosing the reviewed commit/tag and publishing the release.

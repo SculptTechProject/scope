@@ -1,5 +1,61 @@
 # Recorded verification
 
+## 1.0.0 release preparation — 2026-11-02
+
+These checks were recorded on `release/1.0.0` before publication, with source and
+package version `1.0.0`. [GitHub Releases](https://github.com/SculptTechProject/scope/releases)
+records published versions and downloadable artifacts. The earlier alpha evidence
+is retained below as a separate historical baseline.
+
+Checks run during candidate preparation:
+
+- 52 Rust workspace tests passed: 22 core, 23 device, 5 desktop policy/redaction
+  and 2 MCP transport tests. Rules use real HTTP/TLS fixtures; diagnostics and
+  cleanup use fake ADB fixtures rather than a newly booted emulator.
+- Regressions cover proxy Stop during a held replay, deletion/cancellation
+  ownership, Scope session IDs versus payload credential names, valid OpenAPI
+  schema fields and redacted-search membership isolation.
+- 10 frontend interaction tests passed on Node 22.22.3; TypeScript/Vite built.
+- Strict workspace Clippy, actionlint, three Node release/tag-resource tests and three
+  Python installer tests passed. npm audit reports zero vulnerabilities.
+- The macOS arm64 native package built and its complete ad-hoc signature verified.
+- Cargo audit's vulnerability list has zero entries; the Linux glib unsoundness
+  and two unmaintained-dependency warnings remain documented in DEPENDENCIES.md.
+
+Cross-platform [CI run 41440372077](https://github.com/SculptTechProject/scope/actions/runs/41440372077)
+passed all three jobs at source commit `6448b60`: Windows 2022 x64, Ubuntu 22.04
+x64 and macOS 14 arm64. Each job ran the Rust/frontend/resource/installer tests,
+native packaging and the real-process MCP/capture/persistence smoke. These are
+build and headless-protocol checks, not interactive desktop/device validation on
+Windows or Linux. The final PR head is checked separately by GitHub Actions.
+
+### Local native candidate checks
+
+- Fresh synthetic archive: real demo traffic visibly transitioned from in-flight
+  to completed. Rename, notes, tags and pin persisted; active-capture deletion
+  stayed disabled.
+- Created, duplicated, reordered, toggled and deleted rules in the native UI.
+  The enabled product mock returned actual HTTP 503 and the configured JSON to
+  an independent proxied curl client; provenance and applied rule were visible.
+- Composed a POST replay with a new URL/query, custom header and JSON body.
+  The saved exchange showed status 200, the edited fields and normalized length.
+- Activity filtering and no-device diagnostics worked; all MCP permissions were
+  toggled and restored off. Capture stopped and native Quit released all three
+  listeners. No emulator was started.
+- Four new genuine native screenshots show traffic, rules, replay and analysis,
+  with neither the upper recording bar nor mouse pointer. No generative editing
+  or image retouching was used. See [gallery](SCREENSHOTS.md).
+- After final packaging, `scripts/smoke.mjs` passed against executables INSIDE
+  the public `.app`: twelve tools, OpenAPI, real capture, redaction, access gates,
+  SQLite persistence, restart isolation and graceful shutdown. Final resources
+  exclude optional native Frida files; the complete ad-hoc signature verifies.
+
+No new physical Android or Windows/Linux desktop interaction is implied. Native
+branch protection requires maintainer review before merge; the release workflow
+builds an existing tag into a draft and does not publish automatically.
+
+## Historical alpha baseline
+
 Date: 2026-11-02. Host: macOS arm64. Application version 0.1.0; verification baseline for prerelease `v0.1.0-alpha.1`.
 
 ## Automated checks
@@ -51,7 +107,7 @@ Additional checks on the public macOS arm64 bundle:
 - `codesign --verify --deep --strict` passed after the packaging helper signed the complete final bundle with a local **ad-hoc** signature. It is not Apple Developer signed/notarized.
 - `scripts/smoke.mjs` ran against the desktop and MCP executables **inside that public app bundle**. Real capture reads, seven MCP tools, authentication, session access, credential redaction, default replay denial, shutdown and persisted archive/restart isolation passed.
 - Gitleaks 8.30.1 scanned the complete committed source history with no detected secrets. Build products are excluded from the source archive.
-- The four [screenshots](SCREENSHOTS.md) are actual native captures. In the final public app, a proxied curl response paused; the native editor changed HTTP 200 to 503 and supplied synthetic maintenance JSON. The waiting client received that exact body, the saved row became `503 / edited`, and Original retained status 200 and the original JSON.
+- The alpha's four [screenshots](https://github.com/SculptTechProject/scope/blob/e2611d640e10fd2be0c97b0095fed6826ce0ddcb/docs/SCREENSHOTS.md) were actual native captures. In the final public alpha, a proxied curl response paused; the native editor changed HTTP 200 to 503 and supplied synthetic maintenance JSON. The waiting client received that exact body, the saved row became `503 / edited`, and Original retained status 200 and the original JSON. The current gallery shows the 1.0 candidate.
 - A separate concurrency check kept a direct replay waiting at a controlled localhost fixture while another response passed through the proxy. Edit/Continue remained usable, the client received `{"demo":true,"concurrentBreakpointPassed":true}`, and replay finished after the fixture was released. This verifies the separation of replay state from other breakpoint actions. Replay itself sends directly and does not trigger proxy breakpoints.
 - A replay selection race was corrected so an asynchronous result cannot select an old session's exchange after switching sessions. TypeScript/build and independent code review passed. The final native app was left with capture stopped and both breakpoints disabled.
 

@@ -29,6 +29,28 @@ struct Capture {
     session: String,
     exchange: Option<Exchange>,
     start: Instant,
+    matched_rules: Vec<Arc<TrafficRule>>,
+}
+
+/// Registers a replay independently of the proxy listener. Keep registration
+/// until the final archive write, including future cancellation and early errors.
+struct ReplayGuard {
+    engine: Engine,
+    exchange_id: String,
+}
+impl Drop for ReplayGuard {
+    fn drop(&mut self) {
+        // Same order as registration/deletion: replay ownership before the DB.
+        let mut replays = self.engine.inner.active_replays.lock().unwrap();
+        let db = self.engine.inner.db.lock().unwrap();
+        if let Err(error) = db.execute(
+            "UPDATE exchanges SET data=json_set(data,'$.completed',json('true'),'$.error','Replay interrupted before completion','$.durationMs',?2-json_extract(data,'$.startedAt')) WHERE id=?1 AND json_extract(data,'$.completed')=0",
+            params![self.exchange_id, now()],
+        ) {
+            eprintln!("Cannot finalize interrupted replay: {error}");
+        }
+        replays.remove(&self.exchange_id);
+    }
 }
 
 pub(crate) fn header_map(headers: &[Header]) -> Result<HeaderMap> {
@@ -134,8 +156,8 @@ impl Engine {
     }
     pub async fn start_proxy(&self, session_id: String, port: u16) -> Result<ProxyStatus> {
         let _lifecycle = self.inner.lifecycle.lock().await;
-        self.session(&session_id)?;
         let mut running = self.inner.running.lock().unwrap();
+        self.session(&session_id)?;
         if running.as_ref().is_some_and(|p| !p.task.is_finished()) {
             bail!("Proxy already running; stop it before changing the session or port");
         }
@@ -178,6 +200,7 @@ impl Engine {
                 session: session_id.clone(),
                 exchange: None,
                 start: Instant::now(),
+                matched_rules: vec![],
             })
             .with_graceful_shutdown(async {
                 let _ = rx.await;
@@ -226,12 +249,12 @@ impl Engine {
         Ok(())
     }
     fn mark_incomplete(&self, session: &str, reason: &str) {
+        let replays = self.inner.active_replays.lock().unwrap();
         if let Ok(exchanges) = self.all_exchanges(session) {
             for mut e in exchanges {
-                if e.error.as_deref()
-                    == Some("Capture in progress or interrupted before completion")
-                {
+                if !e.completed && !replays.contains_key(&e.id) {
                     e.error = Some(reason.into());
+                    e.completed = true;
                     e.duration_ms = now() - e.started_at;
                     let _ = self.save(&e);
                 }
@@ -277,8 +300,19 @@ impl Engine {
         match result { Ok(Ok(edit)) if edit.action=="continue"=>Ok(edit),Ok(_)=>bail!("{stage} aborted at breakpoint"),Err(_)=>bail!("{stage} breakpoint expired after {BREAKPOINT_TIMEOUT_SECONDS} seconds; transfer aborted") }
     }
     pub async fn replay(&self, id: &str, edit: Option<EditMessage>) -> Result<Exchange> {
-        let old = self.get_exchange(id)?;
-        let mut e = self.fresh_exchange(&old.session_id, old.method.clone(), old.url.clone());
+        // Register while holding the same ownership lock used by deletion. A
+        // deletion either wins before this lookup, or observes an active replay.
+        let (old, mut e, _replay) = {
+            let mut replays = self.inner.active_replays.lock().unwrap();
+            let old = self.get_exchange(id)?;
+            let e = self.fresh_exchange(&old.session_id, old.method.clone(), old.url.clone());
+            replays.insert(e.id.clone(), e.session_id.clone());
+            let guard = ReplayGuard {
+                engine: self.clone(),
+                exchange_id: e.id.clone(),
+            };
+            (old, e, guard)
+        };
         e.request_headers = old.request_headers.clone();
         e.request_body = old.request_body.clone();
         e.request_body_base64 = old.request_body_base64;
@@ -290,8 +324,29 @@ impl Engine {
             }
             apply_request_edit(&mut e, &edit)?;
         }
+        let rules = self.matching_rules(&e.method, &e.url);
+        let terminal = apply_request_rules(&mut e, &rules)?;
+        let bytes = decode_body(&e.request_body, e.request_body_base64)?;
+        let mut map = header_map(&e.request_headers)?;
+        normalize_headers(&mut map, bytes.len(), true);
+        map.remove(HOST);
+        e.request_headers = headers(&map);
+        e.request_bytes = bytes.len() as i64;
         self.save(&e)?;
-        let result = self.send_replay(&mut e).await;
+        self.record_audit("request.replay", Some(&e.id))?;
+        let result = if let Some(edit) = terminal {
+            e.status = edit.status;
+            e.response_headers = edit.headers.unwrap_or_default();
+            e.response_body = edit.body.unwrap_or_default();
+            e.response_body_base64 = edit.body_base64.unwrap_or(false);
+            Ok(())
+        } else {
+            self.send_replay(&mut e).await
+        };
+        let result = result
+            .and_then(|_| apply_response_rules(&mut e, &rules))
+            .and_then(|_| normalize_exchange_response(&mut e));
+        e.completed = true;
         e.duration_ms = now() - e.started_at;
         e.error = result.err().map(|err| format!("Replay failed: {err:#}"));
         self.save(&e)?;
@@ -356,14 +411,93 @@ fn apply_request_edit(e: &mut Exchange, edit: &EditMessage) -> Result<()> {
     if let Some(body) = &edit.body {
         e.request_body = body.clone();
         e.request_body_base64 = edit.body_base64.unwrap_or(false);
+        remove_representation_headers(&mut e.request_headers);
     }
     e.request_bytes = decode_body(&e.request_body, e.request_body_base64)?.len() as i64;
+    Ok(())
+}
+fn remove_representation_headers(headers: &mut Vec<Header>) {
+    headers.retain(|h| {
+        !["content-encoding", "content-md5", "digest", "etag"]
+            .iter()
+            .any(|name| h.name.eq_ignore_ascii_case(name))
+    });
+}
+fn apply_response_edit(e: &mut Exchange, edit: &EditMessage) -> Result<()> {
+    if !has_response_edit(edit) {
+        return Ok(());
+    }
+    if e.original_response.is_none() {
+        e.original_response = Some(response_snapshot(e));
+    }
+    e.edited = true;
+    if let Some(status) = edit.status {
+        e.status = Some(status);
+    }
+    if let Some(headers) = &edit.headers {
+        e.response_headers = headers.clone();
+    }
+    if let Some(body) = &edit.body {
+        e.response_body = body.clone();
+        e.response_body_base64 = edit.body_base64.unwrap_or(false);
+        remove_representation_headers(&mut e.response_headers);
+    }
+    e.response_bytes = decode_body(&e.response_body, e.response_body_base64)?.len() as i64;
+    Ok(())
+}
+fn apply_request_rules(
+    e: &mut Exchange,
+    rules: &[Arc<TrafficRule>],
+) -> Result<Option<EditMessage>> {
+    for rule in rules {
+        match &rule.action {
+            RuleAction::RewriteRequest { .. } => {
+                apply_request_edit(e, &rule.action.edit())?;
+                e.applied_rules.push(rule.evidence("request"));
+            }
+            RuleAction::MockResponse { .. } | RuleAction::Block { .. } => {
+                e.provenance = if matches!(rule.action, RuleAction::Block { .. }) {
+                    TrafficProvenance::Blocked
+                } else {
+                    TrafficProvenance::Mock
+                };
+                e.applied_rules.push(rule.evidence("request"));
+                return Ok(Some(rule.action.edit()));
+            }
+            _ => {}
+        }
+    }
+    Ok(None)
+}
+fn apply_response_rules(e: &mut Exchange, rules: &[Arc<TrafficRule>]) -> Result<()> {
+    for rule in rules {
+        if matches!(rule.action, RuleAction::RewriteResponse { .. }) {
+            apply_response_edit(e, &rule.action.edit())?;
+            e.applied_rules.push(rule.evidence("response"));
+        }
+    }
+    Ok(())
+}
+fn normalize_exchange_response(e: &mut Exchange) -> Result<()> {
+    let mut bytes = decode_body(&e.response_body, e.response_body_base64)?;
+    let status = e.status.unwrap_or(502);
+    let allowed = e.method != "HEAD" && !matches!(status, 100..=199 | 204 | 304);
+    if !allowed {
+        bytes.clear();
+        e.response_body.clear();
+        e.response_body_base64 = false;
+    }
+    let mut map = header_map(&e.response_headers)?;
+    normalize_headers(&mut map, bytes.len(), allowed);
+    e.response_headers = headers(&map);
+    e.response_bytes = bytes.len() as i64;
     Ok(())
 }
 impl Capture {
     fn fail(&mut self, message: String) -> Response<Body> {
         if let Some(e) = self.exchange.as_mut() {
             e.error = Some(message.clone());
+            e.completed = true;
             e.duration_ms = self.start.elapsed().as_millis() as i64;
             if let Err(error) = self.engine.save(e) {
                 eprintln!("Capture persistence failed: {error}");
@@ -371,7 +505,7 @@ impl Capture {
         }
         error_response(StatusCode::BAD_GATEWAY, &message)
     }
-    async fn request(&mut self, req: Request<Body>) -> Result<Request<Body>> {
+    async fn request(&mut self, req: Request<Body>) -> Result<RequestOrResponse> {
         self.start = Instant::now();
         let (mut parts, body) = req.into_parts();
         self.exchange = Some(self.engine.fresh_exchange(
@@ -381,10 +515,13 @@ impl Capture {
         ));
         let e = self.exchange.as_mut().unwrap();
         e.request_headers = headers(&parts.headers);
+        self.matched_rules = self.engine.matching_rules(&e.method, &e.url);
         self.engine.save(e)?;
         let bytes = collect(body).await?;
         (e.request_body, e.request_body_base64) = encode_body(&bytes);
         e.request_bytes = bytes.len() as i64;
+        self.engine.save(e)?;
+        let terminal = apply_request_rules(e, &self.matched_rules)?;
         self.engine.save(e)?;
         if self.engine.inner.request_breakpoint.load(Ordering::SeqCst) {
             let edit = self.engine.pause(e, "request").await?;
@@ -402,7 +539,21 @@ impl Capture {
         }
         e.request_headers = headers(&parts.headers);
         self.engine.save(e)?;
-        Ok(Request::from_parts(parts, Body::from(bytes)))
+        if let Some(edit) = terminal {
+            let response = Response::builder()
+                .status(edit.status.unwrap_or(403))
+                .body(Body::from(decode_body(
+                    edit.body.as_deref().unwrap_or(""),
+                    edit.body_base64.unwrap_or(false),
+                )?))?;
+            let (mut parts, body) = response.into_parts();
+            parts.headers = header_map(edit.headers.as_deref().unwrap_or(&[]))?;
+            return Ok(self
+                .response(Response::from_parts(parts, body))
+                .await?
+                .into());
+        }
+        Ok(Request::from_parts(parts, Body::from(bytes)).into())
     }
     async fn response(&mut self, res: Response<Body>) -> Result<Response<Body>> {
         let (mut parts, body) = res.into_parts();
@@ -416,22 +567,10 @@ impl Capture {
         (e.response_body, e.response_body_base64) = encode_body(&bytes);
         e.response_bytes = bytes.len() as i64;
         self.engine.save(e)?;
+        apply_response_rules(e, &self.matched_rules)?;
         if self.engine.inner.response_breakpoint.load(Ordering::SeqCst) {
             let edit = self.engine.pause(e, "response").await?;
-            if has_response_edit(&edit) {
-                e.original_response = Some(response_snapshot(e));
-                e.edited = true;
-                if let Some(status) = edit.status {
-                    e.status = Some(status);
-                }
-                if let Some(headers) = edit.headers {
-                    e.response_headers = headers;
-                }
-                if let Some(body) = edit.body {
-                    e.response_body = body;
-                    e.response_body_base64 = edit.body_base64.unwrap_or(false);
-                }
-            }
+            apply_response_edit(e, &edit)?;
         }
         let mut bytes = decode_body(&e.response_body, e.response_body_base64)?;
         parts.status = StatusCode::from_u16(e.status.unwrap_or(502))?;
@@ -446,6 +585,7 @@ impl Capture {
         e.response_headers = headers(&parts.headers);
         e.response_bytes = bytes.len() as i64;
         e.error = None;
+        e.completed = true;
         e.duration_ms = self.start.elapsed().as_millis() as i64;
         self.engine.save(e)?;
         Ok(Response::from_parts(parts, Body::from(bytes)))
@@ -468,7 +608,7 @@ impl HttpHandler for Capture {
             .into();
         }
         match self.request(req).await {
-            Ok(req) => req.into(),
+            Ok(req) => req,
             Err(err) => self.fail(format!("{err:#}")).into(),
         }
     }

@@ -1,45 +1,62 @@
-# Scope
+<p align="center">
+  <img src="docs/images/scope-header.svg" alt="Scope — HTTP, in plain sight. Capture, rewrite and keep the evidence." width="100%">
+</p>
 
-[![Build and check](https://github.com/SculptTechProject/scope/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/SculptTechProject/scope/actions/workflows/checks.yml)
-[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
+<p align="center">
+  <strong>The HTTP conversation is yours to inspect.</strong><br>
+  A desktop workbench for HTTP(S), Android instrumentation and agent-assisted debugging.
+</p>
 
-**Inspect Android HTTP traffic. Change it live. Keep every session.**
+<p align="center">
+  <a href="docs/GETTING_STARTED.md">Get started</a> ·
+  <a href="https://github.com/SculptTechProject/scope/releases">Downloads</a> ·
+  <a href="docs/SCREENSHOTS.md">Screenshots</a> ·
+  <a href="docs/MCP.md">MCP</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
-Scope is an open-source desktop HTTP(S) debugger with a Rust capture engine, an Android ADB/Frida adapter, and an MCP server that lets your agent inspect the same saved evidence you see.
+<p align="center">
+  <a href="https://github.com/SculptTechProject/scope/actions/workflows/checks.yml"><img src="https://github.com/SculptTechProject/scope/actions/workflows/checks.yml/badge.svg?branch=main" alt="Build and check"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-2f64ed" alt="AGPL-3.0-or-later license"></a>
+</p>
 
-[Download the alpha](https://github.com/SculptTechProject/scope/releases) · [Getting started](docs/GETTING_STARTED.md) · [Android setup](docs/ANDROID.md) · [MCP](docs/MCP.md) · [Roadmap](ROADMAP.md)
+Scope routes traffic through a Rust engine, gives you control over requests and responses, and saves the result in a local SQLite archive. Inspect it yourself, reopen it tomorrow, or let an MCP client work from the same captured evidence.
 
-![Scope traffic inspector showing a captured local demo request and its response](docs/images/traffic-inspector.png)
+**Local capture, saved sessions and export need no account or subscription.** Built-in analysis runs locally. You choose which sessions an external agent can access.
 
-> **v0.1.0-alpha.1** (app version 0.1.0). macOS on Apple Silicon is the first locally verified desktop target. Windows and Linux have build workflows; runtime and device support on those hosts are still being validated. [What has actually been tested →](docs/VERIFICATION.md)
+> **This README describes Scope 1.0.0.** Check [Releases](https://github.com/SculptTechProject/scope/releases) for published builds and platform notes. Earlier alpha downloads do not include all the features below. [Verification record →](docs/VERIFICATION.md)
 
-## What you can do
+<a href="docs/SCREENSHOTS.md"><img src="docs/images/traffic-inspector.jpg" alt="Real captured traffic: a products request returns a local HTTP 503 mock, with its rule and response JSON visible." width="100%"></a>
 
-- **Capture HTTP and HTTPS** through a localhost proxy and a generated Scope CA.
-- **Choose an Android app** with ADB discovery, device-wide proxy capture, or selected-process Frida instrumentation with selectable proxy, trust, pinning and root-hiding hooks.
-- **Pause and edit requests or responses**, continue or abort them, and inspect the original alongside the edited message. Replay sends directly and creates a separate request; proxy breakpoints apply to traffic sent through the proxy.
-- **Keep named sessions in SQLite.** Bodies, repeated headers, timing and failures survive app restarts. Import/export HAR or a lossless Scope archive.
-- **Analyze observed traffic:** endpoint counts, errors, sizes, latency percentiles, repeated requests and differences between two sessions.
-- **Connect an MCP client:** search, inspect, analyze and compare explicitly shared sessions. Replay is opt-in.
+## Follow a request all the way through
 
-Local capture, saved sessions, export and MCP need no account or subscription. Scope's built-in analysis runs locally without an LLM. An external MCP client may send shared results to its configured model provider.
+| Capture & inspect                                                                                     | Change & repeat                                                                                           | Save & understand                                                                                               |
+| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| HTTP and CA-signed HTTPS interception. Repeated headers, binary bodies, timing and explicit failures. | Ordered request/response rewrites, local mocks and blocks. Pause a live transfer or compose a new replay. | Named sessions with notes, tags and pins. HAR/native archives, session comparison and observed OpenAPI schemas. |
+| [Capture walkthrough →](docs/GETTING_STARTED.md)                                                      | [Rule semantics →](docs/RULES.md)                                                                         | [Architecture & storage →](docs/ARCHITECTURE.md)                                                                |
 
-## Try it
+A rule-generated response is marked as a **mock**. Rewrites retain the **original** message. A replay creates a **new exchange**. The inspector keeps those distinctions visible so your evidence stays useful.
 
-Download the [macOS arm64 alpha](https://github.com/SculptTechProject/scope/releases/tag/v0.1.0-alpha.1), extract it and open Scope. This public package is not notarized and does not redistribute optional Frida native binaries; install the Frida runtime locally when you need instrumentation. Proxy capture, saved sessions and MCP are included. See [installation](docs/GETTING_STARTED.md#install-a-release) and [Frida setup](docs/ANDROID.md#frida-runtime).
+<table>
+  <tr>
+    <td width="50%"><a href="docs/RULES.md"><img src="docs/images/traffic-rules.jpg" alt="Persistent rule editor: match the local products endpoint and return a maintenance response."></a><br><strong>Your rules, saved.</strong><br>Match method, host, path or URL. Rewrite, mock or block.</td>
+    <td width="50%"><a href="docs/GETTING_STARTED.md#automate-a-local-mock"><img src="docs/images/replay-composer.jpg" alt="Replay composer with an edited POST destination and JSON body."></a><br><strong>Change it. Send it again.</strong><br>Edit the destination, method, full headers and body.</td>
+  </tr>
+</table>
 
-For a first capture without an Android device:
+## A real capture in a minute
 
-1. Open Scope and click the **lightning bolt** beside **New session** (tooltip: “Generate real test traffic through the proxy”).
-2. Select a row to inspect its request, response and timing. The fixture generates six real HTTP requests through the local proxy.
-3. Open **Analysis**, or enable a response breakpoint and send your own request through the proxy.
-4. Stop capture and reopen Scope. The session remains in your archive.
+Open Scope and select **Generate real test traffic** — the lightning bolt beside **New session**. It sends six real localhost requests through the proxy, including an intentional sign-in error and repeated product calls.
 
-[Full walkthrough: HTTPS, Android, breakpoints, export and recovery →](docs/GETTING_STARTED.md)
+1. Select a row and inspect the response, headers and timing.
+2. Open **Analysis** to follow an observation back to its exchanges.
+3. Stop capture, quit and reopen. Your session is still there.
 
-## Build from source
+No Android device is needed for this first run. [Continue with HTTPS, Android, breakpoints and export →](docs/GETTING_STARTED.md)
 
-Install [Rust](https://rustup.rs/), Node.js **22.13+**, and [Tauri's platform prerequisites](https://v2.tauri.app/start/prerequisites/). Android capture additionally needs Android SDK Platform Tools (`adb`).
+### Build from source
+
+Install Rust, Node.js **22.13+** and [Tauri's native prerequisites](https://v2.tauri.app/start/prerequisites/). The repository pins the Rust compiler and dependency lockfiles.
 
 ```sh
 git clone https://github.com/SculptTechProject/scope.git
@@ -48,36 +65,56 @@ npm ci
 npm run desktop
 ```
 
-Create a native package with `npm run package`. It builds the companion MCP executable automatically. Standalone Frida binaries are optional resources and are not tracked in Git; [Android setup](docs/ANDROID.md#frida-runtime) explains the Python fallback and packaging.
+`npm run package` builds a native application and its companion MCP executable. `npm run dev` opens the frontend preview; capture needs the desktop app.
 
-## Your agent, with your scope
+## Android, with setup you can inspect
 
-Open **MCP server** in Scope, share the selected session, and copy the generated configuration into a compatible MCP client. Keep Scope open. No sessions are shared by default, sharing resets when Scope restarts, and replay requires **Allow traffic changes**.
+Discover connected devices and installed apps over ADB. Use the **device-wide proxy** path, or instrument a **selected process with Frida** and explicit hook profiles. Read-only diagnostics explain authorization, root, ABI, runtime/server versions, mappings and recovery state before you connect.
 
-The seven tools are `status`, `list_sessions`, `search_requests`, `get_request`, `analyze_session`, `compare_sessions`, and `replay_request`.
+Frida is an optional, separate runtime installation. Pinning and native networking support depend on the target; selecting an app in proxy mode does not prove per-app attribution. **Stop** restores recorded Scope-owned state and preserves external changes. [Setup, supported paths and recovery →](docs/ANDROID.md) · [Diagnostic reference →](docs/DIAGNOSTICS.md)
 
-Credential redaction applies to MCP output, not to your local capture archive. Redaction is best-effort. [Configuration, tool reference and privacy boundaries →](docs/MCP.md)
+## An agent can read the evidence. You set the scope.
 
-![Scope analysis showing endpoint and error evidence from a local demo capture](docs/images/analysis.png)
+Share selected sessions in **MCP server**, then copy the generated configuration into your MCP client. The twelve tools cover search, request inspection, analysis, comparison, observed OpenAPI, edited replay, global rules and device diagnostics.
 
-[More screenshots](docs/SCREENSHOTS.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+| Permission         | What it permits                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Shared sessions    | Read and analyze only the sessions you select.                                                             |
+| Traffic changes    | Explicitly resend captured or edited requests.                                                             |
+| Global rule access | Read a sanitized inventory; writes additionally need traffic-change permission. Rules affect all captures. |
+| Device diagnostics | Read environment and connection evidence, including local paths and device IDs.                            |
 
-## Coverage and limits
+Everything starts off and resets on restart. Known credentials are redacted from MCP results; redaction is best-effort. Raw archives remain local, and a separate sanitized export creates a clearly lossy sharing copy. [Tool reference & privacy boundaries →](docs/MCP.md)
 
-| Area                                 | Current status                                                                         |
-| ------------------------------------ | -------------------------------------------------------------------------------------- |
-| macOS Apple Silicon                  | Local native UI, release build, MCP and rooted Android emulator capture verified       |
-| Windows / Linux / Intel macOS        | Build support under development; no local runtime/device verification claimed          |
-| HTTP(S)                              | Local HTTP and CA-signed HTTPS integration tests                                       |
-| Android proxy mode                   | Device-wide proxy; selecting an app launches it but does not prove per-app attribution |
-| Android Frida mode                   | Selected process, supported Java APIs; not every TLS/network stack                     |
-| Capture size                         | Buffered, **16 MiB per request or response body**; larger captures fail explicitly     |
-| Streaming / WebSocket frames / HTTP3 | Not implemented in this alpha                                                          |
+## Built to be inspected
 
-Breakpoints expire after 60 seconds and abort the transfer. Sessions live on disk, but analysis and archive import/export currently load records into memory. An observed endpoint or JSON shape is evidence from your captures, not a complete API contract. Android 16/Frida compatibility remains experimental; see [known boundaries](docs/ANDROID.md#compatibility-boundaries).
+**Rust engine · Tauri 2 · React · TypeScript · SQLite · stdio MCP**
 
-## Independent, with credit
+The same engine powers the native inspector and MCP. Real HTTP/TLS fixtures test interception, rules and replay; device fixtures test setup and ownership; the process smoke reopens an actual archive and checks agent access after restart.
 
-Scope uses **Rust, Tauri 2, React and TypeScript**. It is an independent project inspired by the workflow of HTTP debugging tools. Its Android integration incorporates HTTP Toolkit interception scripts and Frida components with their original licenses and attribution. It does not require HTTP Toolkit to be installed.
+<a href="docs/SCREENSHOTS.md"><img src="docs/images/analysis.jpg" alt="Analysis of the real local capture: observed endpoints, intentional errors, timings and synthetic response provenance." width="100%"></a>
 
-Licensed **AGPL-3.0-or-later**. See [LICENSE](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md). Contributions are welcome, especially reproducible compatibility reports, integration tests and platform validation.
+| Today                   | Boundary                                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS arm64             | Native UI and packaged workflows checked locally. Ad-hoc signed; not Apple-notarized.                                                                                     |
+| Windows x64 / Linux x64 | CI builds, packages and headless MCP/capture smoke pass. Interactive UI and device validation remain open. Intel macOS is unverified.                                     |
+| Android / Frida         | Earlier smoke covered one rooted Android 16 arm64 emulator. The 1.0 diagnostics changes use fixtures; arbitrary apps and TLS stacks are unverified.                       |
+| Capture                 | Bodies are buffered up to **16 MiB each**. Streaming, WebSocket frames, trailers and HTTP3 are not implemented.                                                           |
+| Archives & analysis     | Records currently load into memory. Large-session streaming/export is planned. Observed schemas are not complete API contracts.                                           |
+| Dependencies            | A Linux glib unsoundness advisory remains tracked in [#11](https://github.com/SculptTechProject/scope/issues/11). See the full [dependency record](docs/DEPENDENCIES.md). |
+
+Breakpoints expire after 60 seconds. [What was actually tested →](docs/VERIFICATION.md)
+
+## Help shape the next release
+
+Useful contributions include reproducible device/OS reports, protocol fixtures, platform validation and improvements to large-capture handling. The roadmap connects proposals to [real public user feedback](docs/USER-NEEDS.md), with a clear distinction between delivered features and planned work.
+
+[Contributing](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) · [Report a bug](https://github.com/SculptTechProject/scope/issues/new/choose) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+
+Every change goes through maintainer review and required platform checks. [Ownership & release process →](docs/GOVERNANCE.md)
+
+---
+
+An independent project by **[SculptTechProject](https://github.com/SculptTechProject)**. Scope includes attributed HTTP Toolkit interception scripts and Frida integration; their original licenses and notices remain intact. HTTP Toolkit does not need to be installed.
+
+**AGPL-3.0-or-later** · [License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md)

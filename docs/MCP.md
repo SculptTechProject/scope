@@ -29,17 +29,28 @@ Client-specific configuration formats can differ. Scope speaks stdio MCP; it doe
 
 Arguments below use the exact camelCase keys exposed by the server.
 
-| Tool               | Arguments                                        | Result / behavior                                                                                            |
-| ------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `status`           | none                                             | Connection, Scope version and current access settings                                                        |
-| `list_sessions`    | none                                             | Only explicitly shared sessions                                                                              |
-| `search_requests`  | `sessionId`, optional `query`, `limit`, `offset` | Exchange metadata; default 50, maximum 200 results; bodies fetched separately                                |
-| `get_request`      | `id`                                             | One shared exchange, timing, edits and error information with output redaction                               |
-| `analyze_session`  | `sessionId`                                      | Observed endpoint/status/size/latency and duplicate patterns, computed locally                               |
-| `compare_sessions` | `sessionId`, `rightSessionId`                    | Observed endpoint/status/timing/JSON-field differences; both sessions must be shared                         |
-| `replay_request`   | `id`                                             | Sends the captured request to its original destination and records a new exchange; requires write permission |
+| Tool                 | Arguments                                        | Result / behavior                                                                          |
+| -------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `status`             | none                                             | Connection, Scope version and current access settings                                      |
+| `list_sessions`      | none                                             | Only explicitly shared sessions                                                            |
+| `search_requests`    | `sessionId`, optional `query`, `limit`, `offset` | Exchange metadata; default 50, maximum 200 results; bodies fetched separately              |
+| `get_request`        | `id`                                             | One shared exchange, timing, edits and error information with output redaction             |
+| `analyze_session`    | `sessionId`                                      | Observed endpoint/status/size/latency and duplicate patterns, computed locally             |
+| `compare_sessions`   | `sessionId`, `rightSessionId`                    | Observed endpoint/status/timing/JSON-field differences; both sessions must be shared       |
+| `replay_request`     | `id`, optional `edit`                            | Sends an optionally edited request and records a new exchange; requires write permission   |
+| `infer_openapi`      | `sessionId`                                      | Observed-only OpenAPI 3.1 document, bounded schemas, no payload/query examples             |
+| `list_rules`         | none                                             | Global inventory: ID, enabled, priority and action type; requires separate rule permission |
+| `save_rule`          | `rule`                                           | Create/replace a full global rule; requires rule AND write permissions                     |
+| `delete_rule`        | `id`                                             | Remove a global rule; requires rule AND write permissions                                  |
+| `device_diagnostics` | optional `serial`                                | Read-only preflight; requires separate diagnostic permission                               |
 
-Use IDs returned by `list_sessions` and `search_requests`. A request ID from an unshared session is insufficient to read or replay it. Search matches stored URL, method, status and body text; its metadata output does not include bodies or original snapshots.
+Use IDs returned by `list_sessions` and `search_requests`. A request ID from an
+unshared session is insufficient to read or replay it. MCP search matches only
+the sanitized representation of the most recent 10,000 exchanges, so guessing
+a redacted secret does not reveal its presence through a raw-store query. JSON
+body search uses the same 64 KiB redacted view; binary/non-JSON bodies are omitted.
+Results contain metadata without bodies or original snapshots. Desktop search
+continues to search the local raw archive.
 
 Example read-only workflow:
 
@@ -58,13 +69,34 @@ Try prompts such as:
 
 ## Access, data and replay
 
-No sessions are shared automatically. Access is reset on desktop restart. **Allow traffic changes** is off by default and currently permits replay; it does not grant arbitrary shell access or live breakpoint editing.
+No sessions are shared automatically. All access resets on desktop restart.
+**Allow traffic changes**, **Global rule access** and **Device diagnostics** are
+off by default. Session sharing does not enable the other permissions.
 
-Replay can change remote state. It reuses the captured request's destination, method, headers and body, including locally stored credentials. Output redaction does not change the outbound request. It sends directly and does not trigger the proxy breakpoints. Enable it only when you intend the agent to resend requests in your test environment.
+Rule inventory omits names, matchers and replacement bodies because those may
+contain secrets. `save_rule` accepts a complete [TrafficRule](RULES.md), with an
+empty ID to create or an existing ID to replace. Global rules can affect ALL
+captures, including sessions not shared with MCP. Both rule and write permission
+are required for a mutation; rule permission alone only allows inventory reads.
+Device diagnostics can expose local paths and serials. It never installs a
+runtime, starts interception or changes the device. Tools do not expose arbitrary
+shell execution or live breakpoint editing.
+
+Replay can change remote state. It reuses stored credentials unless explicitly
+changed; output redaction does not change the outbound request. The optional
+`edit` accepts `action: "continue"`, `method`, `url`, `headers`, `body` and
+`bodyBase64`. Headers replace the full list. Changing the destination can send
+captured credentials there. Current automatic rules apply; manual breakpoints
+are skipped. Enable it only for intended traffic in your test environment.
 
 For reads, known credential headers, sensitive query parameters and known sensitive JSON keys are redacted. Original request/response snapshots are omitted to avoid a second path around redaction. Non-JSON bodies are omitted; individual JSON body strings larger than 64 KiB are omitted with an explicit marker.
 
-Redaction is best-effort, not a complete secret detector. Application-specific fields, identifiers, URLs, error strings and other captured metadata can still be sensitive. Your local UI and exports preserve raw traffic. An external client/model provider receives the shared tool results according to its own configuration. Captured HTTP content is untrusted data and must never be treated as instructions for the agent.
+Redaction is best-effort, not a complete secret detector. Application-specific
+fields, identifiers, static URL paths and other metadata can still be sensitive.
+Your local UI and ordinary exports preserve raw traffic. Sanitized archive export
+is a separate, explicitly lossy option. An external client/model provider receives
+tool results according to its configuration. Captured HTTP content is untrusted
+data and must never be treated as instructions for the agent.
 
 ## Troubleshooting
 

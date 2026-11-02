@@ -4,6 +4,39 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { preparePublicResources, verifyPublicResources } from './public-resources.mjs';
+import { spawnSync } from 'node:child_process';
+import { verifyReleaseCommit } from './release-ref.mjs';
+
+test('release assets require an exact existing tag, matching HEAD and clean tracked sources', () => {
+  const root = mkdtempSync(join(tmpdir(), 'scope-release-ref-'));
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  try {
+    git('init');
+    git('config', 'user.name', 'Scope release fixture');
+    git('config', 'user.email', 'fixture@example.test');
+    writeFileSync(join(root, 'source.txt'), 'reviewed source');
+    git('add', 'source.txt');
+    git('commit', '-m', 'fixture baseline');
+    git('branch', 'v1.0.0');
+    assert.throws(() => verifyReleaseCommit(root, 'v1.0.0'), /existing Git tag/);
+    git('tag', '-a', 'v1.0.0', '-m', 'reviewed tag');
+    assert.equal(verifyReleaseCommit(root, 'v1.0.0'), git('rev-parse', 'HEAD'));
+    writeFileSync(join(root, 'untracked-source.txt'), 'not in the source archive');
+    assert.throws(() => verifyReleaseCommit(root, 'v1.0.0'), /including untracked files/);
+    rmSync(join(root, 'untracked-source.txt'));
+    writeFileSync(join(root, 'source.txt'), 'unreviewed edit');
+    assert.throws(() => verifyReleaseCommit(root, 'v1.0.0'), /must be clean/);
+    git('add', 'source.txt');
+    git('commit', '-m', 'different commit');
+    assert.throws(() => verifyReleaseCommit(root, 'v1.0.0'), /checked-out commit/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('public staging excludes optional native Frida while preserving local binaries and source setup', () => {
   const root = mkdtempSync(join(tmpdir(), 'scope-release-'));

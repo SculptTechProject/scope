@@ -1,0 +1,6 @@
+# Scope's maintainer reviews every change, including these ownership rules.
+* @SculptTechProject
+
+/.github/ @SculptTechProject
+/resources/device/ @SculptTechProject
+/THIRD_PARTY_NOTICES.md @SculptTechProject

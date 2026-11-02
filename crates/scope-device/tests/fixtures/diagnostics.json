@@ -1,0 +1,17 @@
+{
+  "runtimeVersion": "17.9.1",
+  "responses": [
+    {"args":["version"], "stdout":"Android Debug Bridge version 1.0.41\nVersion 36.0.0-fixture"},
+    {"args":["devices","-l"], "stdout":"List of devices attached\nfixture-01 device product:fixture model:Scope_Lab device:fixture transport_id:1\n"},
+    {"serial":"fixture-01", "args":["shell","id"], "stdout":"uid=0(root) gid=0(root) groups=0(root)"},
+    {"serial":"fixture-01", "args":["shell","getprop","ro.product.cpu.abi"], "stdout":"arm64-v8a"},
+    {"serial":"fixture-01", "args":["shell","getprop","ro.build.version.release"], "stdout":"16"},
+    {"serial":"fixture-01", "args":["shell","getprop","ro.build.version.sdk"], "stdout":"36"},
+    {"serial":"fixture-01", "args":["shell","settings","get","global","http_proxy"], "stdout":":0"},
+    {"serial":"fixture-01", "args":["reverse","--list"], "stdout":""},
+    {"serial":"fixture-01", "args":["forward","--list"], "stdout":""},
+    {"serial":"fixture-01", "args":["shell","ps","-A","-o","PID,NAME,ARGS"], "stdout":"PID NAME ARGS\n481 frida-server /data/local/tmp/frida-server"},
+    {"serial":"fixture-01", "args":["shell","test -x '/data/local/tmp/frida-server'"], "stdout":""},
+    {"serial":"fixture-01", "args":["shell","'/data/local/tmp/frida-server' --version"], "stdout":"17.9.1"}
+  ]
+}

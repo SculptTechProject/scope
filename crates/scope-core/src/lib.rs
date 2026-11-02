@@ -1,8 +1,13 @@
 //! Local, durable HTTP(S) interception engine shared by Scope desktop and MCP.
-//! v0.1 buffers bodies up to 16 MiB. Larger bodies fail explicitly; no partial body
+//! Buffers bodies up to 16 MiB. Larger bodies fail explicitly; no partial body
 //! is presented as a successful capture. WebSocket frames and trailers are not captured.
 mod proxy;
 mod report;
+mod rules;
+mod sessions;
+
+pub use rules::{AppliedRule, RuleAction, RuleMatcher, TrafficProvenance, TrafficRule};
+pub use sessions::{AuditEntry, SessionUpdate};
 
 use anyhow::{anyhow, bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -37,6 +42,12 @@ pub struct Session {
     pub exchange_count: i64,
     #[serde(default)]
     pub revision: i64,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub pinned: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Header {
@@ -51,6 +62,8 @@ pub struct Exchange {
     pub method: String,
     pub url: String,
     pub status: Option<u16>,
+    #[serde(default = "completed_default_true")]
+    pub completed: bool,
     pub request_headers: Vec<Header>,
     pub response_headers: Vec<Header>,
     pub request_body: String,
@@ -65,6 +78,10 @@ pub struct Exchange {
     pub edited: bool,
     pub original_request: Option<Value>,
     pub original_response: Option<Value>,
+    #[serde(default)]
+    pub provenance: TrafficProvenance,
+    #[serde(default)]
+    pub applied_rules: Vec<AppliedRule>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,11 +166,16 @@ pub struct Engine {
 struct Inner {
     db: Mutex<Connection>,
     dir: PathBuf,
+    rules: std::sync::RwLock<Vec<Arc<TrafficRule>>>,
     running: Mutex<Option<proxy::Running>>,
     lifecycle: tokio::sync::Mutex<()>,
+    active_replays: Mutex<HashMap<String, String>>,
     pending: Mutex<HashMap<String, (PendingExchange, oneshot::Sender<EditMessage>)>>,
     request_breakpoint: AtomicBool,
     response_breakpoint: AtomicBool,
+}
+fn completed_default_true() -> bool {
+    true
 }
 pub(crate) fn now() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -175,7 +197,19 @@ pub(crate) fn decode_body(body: &str, base64: bool) -> Result<Vec<u8>> {
     })
 }
 pub(crate) fn validate_url(value: &str) -> Result<()> {
+    if value
+        .chars()
+        .any(|ch| ch.is_whitespace() || ch.is_control())
+    {
+        bail!("URL must not contain whitespace or control characters; percent-encode them");
+    }
+    value
+        .parse::<hudsucker::hyper::Uri>()
+        .context("Invalid HTTP request URI")?;
     let url = url::Url::parse(value).context("Invalid URL")?;
+    if url.fragment().is_some() {
+        bail!("HTTP request URLs cannot contain fragments");
+    }
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
         bail!("URL must use http or https with a host");
     }
@@ -207,6 +241,10 @@ impl Engine {
                 "ALTER TABLE sessions ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;",
             )?;
         }
+        sessions::migrate(&db)?;
+        rules::migrate(&db)?;
+        let rules = rules::load(&db)?;
+        db.execute("UPDATE exchanges SET data=json_set(data, '$.completed', json('true'), '$.error', 'Capture interrupted before archive was reopened') WHERE json_extract(data, '$.completed')=0", [])?;
         // A completed response or resolved breakpoint updates an existing exchange;
         // a row count alone cannot tell the GUI that captured data has changed.
         db.execute_batch("CREATE TRIGGER IF NOT EXISTS scope_exchange_insert_revision AFTER INSERT ON exchanges BEGIN UPDATE sessions SET revision=revision+1 WHERE id=NEW.session_id; END; CREATE TRIGGER IF NOT EXISTS scope_exchange_update_revision AFTER UPDATE ON exchanges BEGIN UPDATE sessions SET revision=revision+1 WHERE id=NEW.session_id; END;")?;
@@ -214,8 +252,10 @@ impl Engine {
             inner: Arc::new(Inner {
                 db: Mutex::new(db),
                 dir,
+                rules: std::sync::RwLock::new(rules),
                 running: Mutex::new(None),
                 lifecycle: tokio::sync::Mutex::new(()),
+                active_replays: Mutex::new(HashMap::new()),
                 pending: Mutex::new(HashMap::new()),
                 request_breakpoint: AtomicBool::new(false),
                 response_breakpoint: AtomicBool::new(false),
@@ -230,7 +270,7 @@ impl Engine {
     }
     pub fn list_sessions(&self) -> Result<Vec<Session>> {
         let db = self.inner.db.lock().unwrap();
-        let mut st = db.prepare("SELECT s.id,s.name,s.source,s.created_at,COUNT(e.id),s.revision FROM sessions s LEFT JOIN exchanges e ON e.session_id=s.id GROUP BY s.id ORDER BY s.created_at DESC")?;
+        let mut st = db.prepare("SELECT s.id,s.name,s.source,s.created_at,COUNT(e.id),s.revision,s.notes,s.tags,s.pinned FROM sessions s LEFT JOIN exchanges e ON e.session_id=s.id GROUP BY s.id ORDER BY s.pinned DESC,s.created_at DESC")?;
         let rows = st.query_map([], |r| {
             Ok(Session {
                 id: r.get(0)?,
@@ -239,6 +279,9 @@ impl Engine {
                 created_at: r.get(3)?,
                 exchange_count: r.get(4)?,
                 revision: r.get(5)?,
+                notes: r.get(6)?,
+                tags: serde_json::from_str(&r.get::<_, String>(7)?).unwrap_or_default(),
+                pinned: r.get(8)?,
             })
         })?;
         Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
@@ -254,11 +297,18 @@ impl Engine {
             created_at: now(),
             exchange_count: 0,
             revision: 0,
+            notes: String::new(),
+            tags: vec![],
+            pinned: false,
         };
-        self.inner.db.lock().unwrap().execute(
+        let mut db = self.inner.db.lock().unwrap();
+        let tx = db.transaction()?;
+        tx.execute(
             "INSERT INTO sessions(id,name,source,created_at) VALUES(?1,?2,?3,?4)",
             params![s.id, s.name, s.source, s.created_at],
         )?;
+        sessions::audit(&tx, "session.create", Some(&s.id))?;
+        tx.commit()?;
         Ok(s)
     }
     pub(crate) fn session(&self, id: &str) -> Result<Session> {
@@ -328,6 +378,30 @@ impl Engine {
         }
         Ok(found)
     }
+    /// Stream bounded archive rows through a pure visitor. The visitor must not
+    /// call Engine methods because the archive read lock remains held.
+    pub fn visit_exchanges(
+        &self,
+        session_id: &str,
+        maximum: usize,
+        mut visitor: impl FnMut(Exchange) -> Result<bool>,
+    ) -> Result<usize> {
+        self.session(session_id)?;
+        let db = self.inner.db.lock().unwrap();
+        let mut statement = db.prepare("SELECT data FROM exchanges WHERE session_id=?1 ORDER BY started_at DESC,rowid DESC LIMIT ?2")?;
+        let rows = statement
+            .query_map(params![session_id, maximum.min(100_000) as i64], |row| {
+                row.get::<_, String>(0)
+            })?;
+        let mut visited = 0;
+        for row in rows {
+            visited += 1;
+            if !visitor(serde_json::from_str(&row?)?)? {
+                break;
+            }
+        }
+        Ok(visited)
+    }
     pub(crate) fn all_exchanges(&self, id: &str) -> Result<Vec<Exchange>> {
         self.session(id)?;
         let db = self.inner.db.lock().unwrap();
@@ -375,6 +449,7 @@ impl Engine {
             method,
             url,
             status: None,
+            completed: false,
             request_headers: vec![],
             response_headers: vec![],
             request_body: String::new(),
@@ -385,10 +460,12 @@ impl Engine {
             duration_ms: 0,
             request_bytes: 0,
             response_bytes: 0,
-            error: Some("Capture in progress or interrupted before completion".into()),
+            error: None,
             edited: false,
             original_request: None,
             original_response: None,
+            provenance: TrafficProvenance::Upstream,
+            applied_rules: vec![],
         }
     }
 }

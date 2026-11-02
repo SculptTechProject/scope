@@ -10,8 +10,11 @@ Scope's Android adapter uses its own localhost proxy and public CA. HTTP Toolkit
 - **Frida:** a separate Python worker spawns and attaches to the selected application. Bundled JavaScript profiles configure the app proxy, inject Scope's CA, disable supported certificate pinning and optionally hide selected root indicators.
 - Stop restores the previous Android proxy and reverse mapping, detaches hooks, removes Scope's temporary CA and stops only a server process spawned by Scope.
 - A saved recovery file allows Stop to retry after a disconnected device or interrupted session. Starting another session is refused until that cleanup succeeds.
+- The 1.0 **Diagnostics** workspace and `device_diagnostics` MCP tool provide read-only authorization/root/ABI/runtime/mapping/recovery preflight with actionable fixes. See [diagnostic boundaries and troubleshooting](DIAGNOSTICS.md).
 
 No device proxy, certificate or Frida server changes occur during device/app listing. Start interception is the action that changes the selected device. A root check can cause the device's superuser manager to show its normal authorization prompt.
+
+Diagnostics never starts an emulator, app or server, uploads a binary, downloads a runtime, changes trust/proxy/mappings, or performs cleanup. Local server versions are not guessed from filenames; the report distinguishes unknown values from verified binary versions. A ready result is basic preflight, not proof of app/OS compatibility.
 
 ## ADB
 
@@ -30,7 +33,7 @@ A non-rooted device can use system proxy mode for HTTP. HTTPS then depends on ma
 
 ## Frida runtime
 
-The Rust adapter and resources are designed for multiple hosts; the worker is isolated from the desktop process. **The public v0.1.0-alpha.1 app does not include a standalone Frida worker or Android server.** Install the optional runtime locally before using Frida mode. The integration source and JavaScript profiles are included; ordinary proxy capture does not require Python or Frida.
+The Rust adapter and resources are designed for multiple hosts; the worker is isolated from the desktop process. **Public packages, including 1.0.0, do not include a standalone Frida worker or Android server.** Install the optional runtime locally before using Frida mode. The integration source and JavaScript profiles are included; ordinary proxy capture does not require Python or Frida. Windows/Linux have CI build/headless-protocol coverage; interactive desktop and device behavior on those hosts remain unverified. See [verification boundaries](VERIFICATION.md).
 
 A task-local macOS arm64 bundle with a standalone worker/server was exercised during development. That verifies the optional integration, not the contents of the public download. Worker and device server must use the **same Frida version**.
 
@@ -66,7 +69,7 @@ export SCOPE_PYTHON="$PWD/.venv-frida/bin/python"
 
 On Windows, use `.venv-frida\Scripts\python.exe` and set `SCOPE_PYTHON` to its absolute path before launching Scope.
 
-With no server override, Scope checks the selected device's ABI and uses a matching optional packaged or managed `frida-server-17.9.1-android-*` resource when available. No native server is included in the initial public app; the recommended helper installs it locally. If none is found, Scope connects to an existing default-port USB Frida server and does not stop a server it did not start.
+With no server override, Scope checks the selected device's ABI and uses a matching optional packaged or managed `frida-server-17.9.1-android-*` resource when available. No native server is included in public packages; the recommended helper installs it locally. If none is found, Scope connects to an existing default-port USB Frida server and does not stop a server it did not start.
 
 To have Scope launch a dedicated server, download a matching official binary locally first. This helper **only downloads** and does not alter the device:
 
@@ -78,6 +81,8 @@ export SCOPE_FRIDA_SERVER_LOCAL="$PWD/.runtime/frida-server"
 ```
 
 Start interception then copies that binary to `/data/local/tmp/scope-frida-server`, checks its version and starts it on device loopback port `24073`. A dynamically allocated local ADB forward connects the Python worker. Only the recorded server PID is stopped.
+
+Before upload, Start checks the local ELF architecture against the selected Android ABI. It refuses unsupported/unknown ABIs, exact worker/server version mismatches and an occupied dedicated listener port. A failed server startup reports its local Android log. A worker exit/detach clears the running indicator and preserves recovery state for Stop.
 
 Alternatively, `SCOPE_FRIDA_SERVER=/absolute/device/path/frida-server` selects an existing executable on the Android device and starts a dedicated instance. The path is validated before entering a remote shell command.
 
@@ -122,6 +127,8 @@ Scope writes `device-recovery.json` under its runtime directory before changing 
 
 Press Stop while the device is connected. If cleanup fails, the file remains and the log explains that reconnection is needed. Reconnect the **same device**, then press Stop again. Do not delete the recovery file as a substitute for restoring device settings.
 
+Stop verifies that current proxy and ADB mappings still match Scope's recorded values before restoring them. External changes are preserved and logged. Invalid saved fields are rejected before cleanup commands; failed inspection leaves recovery available for a retry.
+
 Rooted CA injection uses temporary mount overlays, following the upstream Android 14+ namespace handling. Stop removes Scope's certificate from those shared stores and the selected app. The remaining mount overlays disappear on reboot. The adapter does not unmount shared trust stores underneath other apps.
 
 Frida detaches hooks on Stop and leaves the selected app running. Restart that app to return its full runtime state to a clean baseline. A server binary downloaded/copied for Scope remains available for the next session; its process is stopped.
@@ -148,6 +155,7 @@ For low-level adapter diagnosis:
 
 ```sh
 cargo run -p scope-device --example device -- devices
+cargo run -p scope-device --example device -- diagnostics YOUR_SERIAL
 cargo run -p scope-device --example device -- apps YOUR_SERIAL
 cargo run -p scope-device --example device -- start YOUR_SERIAL com.scope.demo proxy 17890 /absolute/path/scope-ca.pem
 # Enter stops and restores this smoke-test session.
@@ -173,3 +181,5 @@ On 2026-11-02, the macOS build was checked against an existing rooted Android 16
 - A second Frida smoke used the standalone worker and automatically selected packaged Android arm64 server, with all Python/Frida override variables unset. Two further real APK requests reached the native app's archive; Stop again restored forwarding and left no owned server process.
 
 This is a short functional smoke test of one app/OS/device combination. It does not establish stability under long sessions or support for other network stacks. Windows/Linux packaging and physical-device behavior were not tested in this run.
+
+The 1.0 diagnostics/lifecycle updates add fixture-based authorization, ABI/version, recovery ownership and worker-exit tests. No emulator was booted and no new physical-device/interception smoke test was performed for those updates.

@@ -1,0 +1,771 @@
+//! End-to-end rule engine contracts: real sockets, TLS interception, persistence and cleanup.
+use http_body_util::BodyExt;
+use hudsucker::{
+    hyper::{service::service_fn, Request, Response},
+    hyper_util::{
+        rt::{TokioExecutor, TokioIo},
+        server::conn::auto,
+    },
+    rcgen::{CertificateParams, Issuer, KeyPair},
+    rustls::{self, crypto::aws_lc_rs},
+    Body,
+};
+use scope_core::{EditMessage, Engine, SessionUpdate, TrafficProvenance, TrafficRule};
+use serde_json::{json, Value};
+use std::{
+    convert::Infallible,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+use tokio::{net::TcpListener, task::JoinHandle};
+
+async fn fixture(engine: &Engine, tls: bool) -> (String, Arc<AtomicUsize>, JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let requests = Arc::new(AtomicUsize::new(0));
+    let count = requests.clone();
+    let acceptor = if tls {
+        let key = KeyPair::generate().unwrap();
+        let issuer = Issuer::from_ca_cert_pem(
+            &std::fs::read_to_string(engine.ca_cert_path()).unwrap(),
+            KeyPair::from_pem(
+                &std::fs::read_to_string(engine.data_dir().join("scope-ca-key.pem")).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let cert = CertificateParams::new(vec!["localhost".into()])
+            .unwrap()
+            .signed_by(&key, &issuer)
+            .unwrap();
+        let config =
+            rustls::ServerConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_no_client_auth()
+                .with_single_cert(
+                    vec![cert.der().clone()],
+                    rustls::pki_types::PrivatePkcs8KeyDer::from(key.serialize_der()).into(),
+                )
+                .unwrap();
+        Some(tokio_rustls::TlsAcceptor::from(Arc::new(config)))
+    } else {
+        None
+    };
+    let task = tokio::spawn(async move {
+        loop {
+            let (stream, _) = listener.accept().await.unwrap();
+            let count = count.clone();
+            let acceptor = acceptor.clone();
+            tokio::spawn(async move {
+                let handler = service_fn(move |req: Request<hudsucker::hyper::body::Incoming>| {
+                    let count = count.clone();
+                    async move {
+                        count.fetch_add(1, Ordering::SeqCst);
+                        let delayed = req.uri().path() == "/slow";
+                        let path = req.uri().path().to_owned();
+                        let method = req.method().to_string();
+                        let saw = req
+                            .headers()
+                            .get("x-rule")
+                            .map(|h| h.to_str().unwrap().to_owned())
+                            .unwrap_or_default();
+                        let body = req.into_body().collect().await.unwrap().to_bytes();
+                        if delayed {
+                            tokio::time::sleep(Duration::from_millis(300)).await;
+                        }
+                        Ok::<_, Infallible>(
+                            Response::builder()
+                                .header("x-upstream-path", path)
+                                .header("x-upstream-method", method)
+                                .header("x-saw-rule", saw)
+                                .header("content-encoding", "identity")
+                                .header("etag", "stale")
+                                .body(Body::from(body))
+                                .unwrap(),
+                        )
+                    }
+                });
+                let server = auto::Builder::new(TokioExecutor::new());
+                if let Some(tls) = acceptor {
+                    if let Ok(tls) = tls.accept(stream).await {
+                        let _ = server.serve_connection(TokioIo::new(tls), handler).await;
+                    }
+                } else {
+                    let _ = server.serve_connection(TokioIo::new(stream), handler).await;
+                }
+            });
+        }
+    });
+    (
+        format!(
+            "{}://{}:{port}",
+            if tls { "https" } else { "http" },
+            if tls { "localhost" } else { "127.0.0.1" }
+        ),
+        requests,
+        task,
+    )
+}
+fn client(engine: &Engine, port: u16) -> reqwest::Client {
+    reqwest::Client::builder()
+        .proxy(reqwest::Proxy::all(format!("http://127.0.0.1:{port}")).unwrap())
+        .add_root_certificate(
+            reqwest::Certificate::from_pem(&std::fs::read(engine.ca_cert_path()).unwrap()).unwrap(),
+        )
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap()
+}
+fn rule(priority: i32, matcher: Value, action: Value) -> TrafficRule {
+    serde_json::from_value(json!({"id":"","name":format!("Rule {priority}"),"enabled":true,"priority":priority,"matcher":matcher,"action":action})).unwrap()
+}
+#[tokio::test]
+async fn mock_and_block_never_contact_upstream_over_http_and_https() {
+    for tls in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::open(dir.path()).unwrap();
+        let session = engine
+            .create_session("Rules".into(), "test".into())
+            .unwrap();
+        let (url, requests, server) = fixture(&engine, tls).await;
+        let mock = engine.save_rule(rule(1,json!({"pathPrefix":"/mock","method":"GET"}),json!({"type":"mockResponse","status":201,"headers":[{"name":"content-type","value":"application/octet-stream"},{"name":"content-length","value":"999"}],"body":"AP+A","bodyBase64":true}))).unwrap();
+        engine
+            .save_rule(rule(
+                2,
+                json!({"pathPrefix":"/blocked"}),
+                json!({"type":"block","reason":"Policy test"}),
+            ))
+            .unwrap();
+        let proxy = engine.start_proxy(session.id.clone(), 0).await.unwrap();
+        let client = client(&engine, proxy.port);
+        let response = client.get(format!("{url}/mock")).send().await.unwrap();
+        assert_eq!(response.status(), 201);
+        assert_eq!(response.content_length(), Some(3));
+        assert_eq!(response.bytes().await.unwrap().as_ref(), &[0, 255, 128]);
+        let blocked = client
+            .post(format!("{url}/blocked"))
+            .body("never sent")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(blocked.status(), 403);
+        assert!(blocked.text().await.unwrap().contains("Policy test"));
+        assert_eq!(requests.load(Ordering::SeqCst), 0);
+        engine.stop_proxy().await.unwrap();
+        let exchanges = engine.list_exchanges(&session.id, None, 10, 0).unwrap();
+        assert!(exchanges.iter().all(|e| e.completed && e.error.is_none()));
+        assert_eq!(exchanges[0].provenance, TrafficProvenance::Blocked);
+        assert_eq!(exchanges[1].provenance, TrafficProvenance::Mock);
+        assert_eq!(exchanges[1].applied_rules[0].rule_id, mock.id);
+        let replay = engine.replay(&exchanges[1].id, None).await.unwrap();
+        assert_eq!(replay.provenance, TrafficProvenance::Mock);
+        assert_eq!(requests.load(Ordering::SeqCst), 0);
+        server.abort();
+    }
+}
+#[tokio::test]
+async fn ordered_rewrites_keep_originals_and_normalize_binary_and_encoding_headers() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let session = engine
+        .create_session("Rewrites".into(), "test".into())
+        .unwrap();
+    let (url, requests, server) = fixture(&engine, true).await;
+    engine.save_rule(rule(20,json!({"pathPrefix":"/before"}),json!({"type":"rewriteRequest","body":"AP+A","bodyBase64":true,"headers":[{"name":"x-rule","value":"applied"},{"name":"content-length","value":"800"},{"name":"content-encoding","value":"gzip"}]}))).unwrap();
+    engine.save_rule(rule(10,json!({"pathPrefix":"/before"}),json!({"type":"rewriteRequest","url":format!("{url}/after"),"method":"PATCH","body":"first"}))).unwrap();
+    engine
+        .save_rule(rule(
+            30,
+            json!({"pathPrefix":"/before"}),
+            json!({"type":"rewriteResponse","status":202,"body":"reply"}),
+        ))
+        .unwrap();
+    // Matching is frozen against incoming URL. This rule must not activate after /before is rewritten.
+    engine
+        .save_rule(rule(
+            40,
+            json!({"pathPrefix":"/after"}),
+            json!({"type":"block"}),
+        ))
+        .unwrap();
+    let proxy = engine.start_proxy(session.id.clone(), 0).await.unwrap();
+    let client = client(&engine, proxy.port);
+    let response = client
+        .post(format!("{url}/before"))
+        .body("original body")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 202);
+    assert_eq!(response.headers()["x-upstream-path"], "/after");
+    assert_eq!(response.headers()["x-upstream-method"], "PATCH");
+    assert_eq!(response.headers()["x-saw-rule"], "applied");
+    assert!(!response.headers().contains_key("content-encoding"));
+    assert!(!response.headers().contains_key("etag"));
+    assert_eq!(response.content_length(), Some(5));
+    assert_eq!(response.text().await.unwrap(), "reply");
+    assert_eq!(requests.load(Ordering::SeqCst), 1);
+    engine.stop_proxy().await.unwrap();
+    let e = engine
+        .list_exchanges(&session.id, None, 10, 0)
+        .unwrap()
+        .remove(0);
+    assert_eq!(e.method, "PATCH");
+    assert_eq!(e.request_body, "AP+A");
+    assert!(e.request_body_base64);
+    assert_eq!(
+        e.original_request.as_ref().unwrap()["body"],
+        "original body"
+    );
+    assert_eq!(e.original_response.as_ref().unwrap()["body"], "AP+A");
+    assert_eq!(e.applied_rules.len(), 3);
+    assert_eq!(e.applied_rules[0].name, "Rule 10");
+    assert_eq!(e.applied_rules[1].name, "Rule 20");
+    assert!(e
+        .request_headers
+        .iter()
+        .any(|h| h.name == "content-length" && h.value == "3"));
+    let archive = engine.export_session(&session.id).unwrap();
+    let imported = engine.import_session(archive).unwrap();
+    let imported = engine
+        .list_exchanges(&imported.id, None, 10, 0)
+        .unwrap()
+        .remove(0);
+    assert_eq!(imported.applied_rules.len(), 3);
+    assert_eq!(imported.original_response, e.original_response);
+    server.abort();
+}
+#[tokio::test]
+async fn in_flight_state_updates_same_exchange_and_rule_updates_are_atomic_per_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let session = engine
+        .create_session("Snapshot".into(), "test".into())
+        .unwrap();
+    let (url, _, server) = fixture(&engine, false).await;
+    let saved = engine
+        .save_rule(rule(
+            1,
+            json!({"pathPrefix":"/slow"}),
+            json!({"type":"rewriteResponse","body":"old snapshot"}),
+        ))
+        .unwrap();
+    let proxy = engine.start_proxy(session.id.clone(), 0).await.unwrap();
+    let client = client(&engine, proxy.port);
+    let firstclient = client.clone();
+    let firsturl = url.clone();
+    let request = tokio::spawn(async move {
+        firstclient
+            .get(format!("{firsturl}/slow"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap()
+    });
+    let pending = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let rows = engine.list_exchanges(&session.id, None, 10, 0).unwrap();
+            if !rows.is_empty() {
+                break rows[0].clone();
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(!pending.completed);
+    assert!(pending.error.is_none());
+    assert_eq!(pending.status, None);
+    let mut changed = saved;
+    changed.action =
+        serde_json::from_value(json!({"type":"rewriteResponse","body":"new snapshot"})).unwrap();
+    engine.save_rule(changed).unwrap();
+    assert_eq!(request.await.unwrap(), "old snapshot");
+    let completed = engine.get_exchange(&pending.id).unwrap();
+    assert!(completed.completed);
+    assert_eq!(completed.response_body, "old snapshot");
+    assert_eq!(
+        client
+            .get(format!("{url}/slow"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap(),
+        "new snapshot"
+    );
+    engine.stop_proxy().await.unwrap();
+    let replaying = engine.clone();
+    let replay_id = completed.id;
+    let replay = tokio::spawn(async move { replaying.replay(&replay_id, None).await.unwrap() });
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if engine
+                .list_exchanges(&session.id, None, 10, 0)
+                .unwrap()
+                .iter()
+                .any(|exchange| !exchange.completed)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(engine
+        .delete_session(&session.id)
+        .unwrap_err()
+        .to_string()
+        .contains("active replays"));
+    assert!(replay.await.unwrap().completed);
+    engine.delete_session(&session.id).unwrap();
+    server.abort();
+}
+#[tokio::test]
+async fn durable_rules_session_metadata_audit_and_active_delete_guard() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let session = engine
+        .create_session("Before".into(), "test".into())
+        .unwrap();
+    let rule = engine
+        .save_rule(rule(1, json!({}), json!({"type":"block"})))
+        .unwrap();
+    engine
+        .update_session(
+            &session.id,
+            SessionUpdate {
+                name: Some("After".into()),
+                notes: Some("Keep this capture\nfor review".into()),
+                tags: Some(vec![
+                    "android".into(),
+                    "regression".into(),
+                    "android".into(),
+                ]),
+                pinned: Some(true),
+            },
+        )
+        .unwrap();
+    engine.start_proxy(session.id.clone(), 0).await.unwrap();
+    assert!(engine
+        .delete_session(&session.id)
+        .unwrap_err()
+        .to_string()
+        .contains("Stop capture"));
+    engine.stop_proxy().await.unwrap();
+    drop(engine);
+    let reopened = Engine::open(dir.path()).unwrap();
+    let s = reopened.list_sessions().unwrap().remove(0);
+    assert_eq!(s.name, "After");
+    assert!(s.pinned);
+    assert_eq!(s.tags, vec!["android", "regression"]);
+    assert!(s.notes.contains("review"));
+    assert_eq!(reopened.list_rules().unwrap()[0].id, rule.id);
+    assert!(reopened.record_audit("secret token=123", None).is_err());
+    assert!(reopened
+        .record_audit("request.replay", Some("https://example.com/token"))
+        .is_err());
+    reopened.delete_rule(&rule.id).unwrap();
+    reopened.delete_session(&session.id).unwrap();
+    assert!(reopened.list_sessions().unwrap().is_empty());
+    let audit = reopened.list_audit(100).unwrap();
+    assert!(audit.iter().any(|entry| entry.action == "session.delete"));
+    assert!(audit.iter().any(|entry| entry.action == "rule.delete"));
+    assert!(audit
+        .iter()
+        .all(|entry| entry.target_id.as_deref() != Some("After")));
+}
+#[test]
+fn invalid_rules_do_not_replace_last_good_configuration() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let mut saved = engine
+        .save_rule(rule(
+            1,
+            json!({"host":"Example.COM"}),
+            json!({"type":"mockResponse","status":200,"body":"ok"}),
+        ))
+        .unwrap();
+    assert_eq!(saved.matcher.host.as_deref(), Some("example.com"));
+    let old = saved.clone();
+    saved.action = serde_json::from_value(json!({"type":"mockResponse","status":101})).unwrap();
+    assert!(engine.save_rule(saved).is_err());
+    for (matcher, action) in [
+        (json!({"host":"*.example.com"}), json!({"type":"block"})),
+        (json!({"pathPrefix":"wrong"}), json!({"type":"block"})),
+        (
+            json!({}),
+            json!({"type":"rewriteRequest","url":"file:///etc/passwd"}),
+        ),
+        (
+            json!({}),
+            json!({"type":"rewriteResponse","headers":[{"name":"x-header","value":"bad\r\nvalue"}]}),
+        ),
+        (
+            json!({}),
+            json!({"type":"mockResponse","status":200,"body":"not-base64!","bodyBase64":true}),
+        ),
+        (json!({}), json!({"type":"rewriteRequest"})),
+    ] {
+        assert!(engine.save_rule(rule(2, matcher, action)).is_err());
+    }
+    let rules = engine.list_rules().unwrap();
+    assert_eq!(rules.len(), 1);
+    assert_eq!(rules[0].id, old.id);
+    assert_eq!(
+        serde_json::to_value(&rules[0]).unwrap(),
+        serde_json::to_value(old).unwrap()
+    );
+}
+#[tokio::test]
+async fn rules_run_before_breakpoints_and_concurrent_mock_requests_keep_evidence() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let session = engine
+        .create_session("Breakpoints".into(), "test".into())
+        .unwrap();
+    let rewrite = engine
+        .save_rule(rule(
+            1,
+            json!({"pathPrefix":"/pause"}),
+            json!({"type":"rewriteRequest","body":"request rule"}),
+        ))
+        .unwrap();
+    engine
+        .save_rule(rule(
+            2,
+            json!({"pathPrefix":"/pause"}),
+            json!({"type":"mockResponse","status":201,"body":"mock body"}),
+        ))
+        .unwrap();
+    engine
+        .save_rule(rule(
+            3,
+            json!({"pathPrefix":"/pause"}),
+            json!({"type":"rewriteResponse","body":"response rule"}),
+        ))
+        .unwrap();
+    let proxy = engine.start_proxy(session.id.clone(), 0).await.unwrap();
+    let client = client(&engine, proxy.port);
+    engine.set_breakpoints(true, true);
+    let firstclient = client.clone();
+    let request = tokio::spawn(async move {
+        firstclient
+            .post("https://localhost:1/pause")
+            .body("before")
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap()
+    });
+    async fn pending(engine: &Engine, stage: &str) -> scope_core::PendingExchange {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if let Some(p) = engine.pending().into_iter().find(|p| p.stage == stage) {
+                    break p;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+    let req = pending(&engine, "request").await;
+    assert_eq!(req.body, "request rule");
+    engine
+        .resolve_breakpoint(&req.id, scope_core::EditMessage::continue_unchanged())
+        .unwrap();
+    let res = pending(&engine, "response").await;
+    assert_eq!(res.status, Some(201));
+    assert_eq!(res.body, "response rule");
+    engine
+        .resolve_breakpoint(
+            &res.id,
+            scope_core::EditMessage {
+                action: "continue".into(),
+                body: Some("manual wins".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(request.await.unwrap(), "manual wins");
+    let e = engine.get_exchange(&req.exchange_id).unwrap();
+    assert!(e.completed);
+    assert_eq!(e.original_request.unwrap()["body"], "before");
+    assert_eq!(e.original_response.unwrap()["body"], "mock body");
+    assert_eq!(e.applied_rules.len(), 3);
+    engine.set_breakpoints(false, false);
+    let mut requests = Vec::new();
+    for i in 0..32 {
+        let client = client.clone();
+        requests.push(tokio::spawn(async move {
+            let response = client
+                .get(format!("http://localhost:1/pause?i={i}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), 201);
+            assert_eq!(response.text().await.unwrap(), "response rule");
+        }));
+    }
+    for request in requests {
+        request.await.unwrap();
+    }
+    let rows = engine.list_exchanges(&session.id, None, 100, 0).unwrap();
+    assert_eq!(rows.len(), 33);
+    assert!(rows.iter().all(|e| e.completed
+        && e.provenance == TrafficProvenance::Mock
+        && e.applied_rules[0].rule_id == rewrite.id));
+    let ids = rows
+        .iter()
+        .map(|e| &e.id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(ids.len(), 33);
+    engine.stop_proxy().await.unwrap();
+}
+#[tokio::test]
+async fn failed_and_interrupted_captures_are_completed_and_restart_recovers_inflight() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let session = engine
+        .create_session("Failures".into(), "test".into())
+        .unwrap();
+    let proxy = engine.start_proxy(session.id.clone(), 0).await.unwrap();
+    let client = client(&engine, proxy.port);
+    let response = client
+        .get("http://127.0.0.1:1/refused")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 502);
+    let failed = engine
+        .list_exchanges(&session.id, None, 10, 0)
+        .unwrap()
+        .remove(0);
+    assert!(failed.completed);
+    assert!(failed.error.unwrap().contains("Upstream"));
+    engine.stop_proxy().await.unwrap();
+    drop(engine);
+    let db = rusqlite::Connection::open(dir.path().join("scope.sqlite3")).unwrap();
+    db.execute(
+        "UPDATE exchanges SET data=json_set(data,'$.completed',json('false'),'$.error',NULL)",
+        [],
+    )
+    .unwrap();
+    drop(db);
+    let reopened = Engine::open(dir.path()).unwrap();
+    let recovered = reopened
+        .list_exchanges(&session.id, None, 10, 0)
+        .unwrap()
+        .remove(0);
+    assert!(recovered.completed);
+    assert!(recovered.error.unwrap().contains("interrupted"));
+}
+
+async fn held_replay_fixture() -> (
+    String,
+    Arc<tokio::sync::Notify>,
+    Arc<tokio::sync::Notify>,
+    JoinHandle<()>,
+) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let (entered_server, release_server) = (entered.clone(), release.clone());
+    let task = tokio::spawn(async move {
+        loop {
+            let (stream, _) = listener.accept().await.unwrap();
+            let (entered, release) = (entered_server.clone(), release_server.clone());
+            tokio::spawn(async move {
+                let handler = service_fn(move |req: Request<hudsucker::hyper::body::Incoming>| {
+                    let (entered, release) = (entered.clone(), release.clone());
+                    async move {
+                        if req.uri().path() == "/held" {
+                            entered.notify_one();
+                            release.notified().await;
+                        }
+                        Ok::<_, Infallible>(Response::new(Body::from("complete")))
+                    }
+                });
+                let _ = auto::Builder::new(TokioExecutor::new())
+                    .serve_connection(TokioIo::new(stream), handler)
+                    .await;
+            });
+        }
+    });
+    (base, entered, release, task)
+}
+
+#[tokio::test]
+async fn stopping_proxy_preserves_live_replay_ownership_until_its_final_archive_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let session = engine
+        .create_session("Replay ownership".into(), "test".into())
+        .unwrap();
+    let (base, entered, release, fixture_task) = held_replay_fixture().await;
+    let proxy = engine.start_proxy(session.id.clone(), 0).await.unwrap();
+    let seed_client = client(&engine, proxy.port);
+    assert_eq!(
+        seed_client
+            .get(format!("{base}/seed"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap(),
+        "complete"
+    );
+    drop(seed_client);
+    let original = engine
+        .list_exchanges(&session.id, None, 10, 0)
+        .unwrap()
+        .remove(0);
+    let replay_engine = engine.clone();
+    let task = tokio::spawn(async move {
+        replay_engine
+            .replay(
+                &original.id,
+                Some(EditMessage {
+                    action: "continue".into(),
+                    url: Some(format!("{base}/held")),
+                    ..Default::default()
+                }),
+            )
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), entered.notified())
+        .await
+        .unwrap();
+    let replay_id = engine
+        .list_exchanges(&session.id, None, 10, 0)
+        .unwrap()
+        .into_iter()
+        .find(|exchange| !exchange.completed)
+        .unwrap()
+        .id;
+    tokio::time::timeout(Duration::from_secs(6), engine.stop_proxy())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !engine.get_exchange(&replay_id).unwrap().completed,
+        "Proxy Stop finalized an independently running replay"
+    );
+    assert!(engine
+        .delete_session(&session.id)
+        .unwrap_err()
+        .to_string()
+        .contains("active replays"));
+
+    // Deletion must depend on actual ownership even if another archive operation
+    // changes the row's completion flag while the network operation is alive.
+    let db = rusqlite::Connection::open(dir.path().join("scope.sqlite3")).unwrap();
+    db.execute(
+        "UPDATE exchanges SET data=json_set(data,'$.completed',json('true')) WHERE id=?1",
+        [&replay_id],
+    )
+    .unwrap();
+    drop(db);
+    assert!(engine
+        .delete_session(&session.id)
+        .unwrap_err()
+        .to_string()
+        .contains("active replays"));
+    release.notify_one();
+    let replay = tokio::time::timeout(Duration::from_secs(5), task)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(replay.id, replay_id);
+    assert!(replay.completed && replay.error.is_none());
+    assert_eq!(
+        engine.get_exchange(&replay_id).unwrap().response_body,
+        "complete"
+    );
+    engine.delete_session(&session.id).unwrap();
+    fixture_task.abort();
+}
+
+#[tokio::test]
+async fn cancelled_or_invalid_replays_release_ownership_and_finalize_interrupted_rows() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let session = engine
+        .create_session("Replay cancellation".into(), "test".into())
+        .unwrap();
+    let (base, entered, release, fixture_task) = held_replay_fixture().await;
+    let proxy = engine.start_proxy(session.id.clone(), 0).await.unwrap();
+    let seed_client = client(&engine, proxy.port);
+    seed_client
+        .get(format!("{base}/seed"))
+        .send()
+        .await
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    drop(seed_client);
+    let original = engine
+        .list_exchanges(&session.id, None, 10, 0)
+        .unwrap()
+        .remove(0);
+    assert!(engine
+        .replay(
+            &original.id,
+            Some(EditMessage {
+                action: "invalid".into(),
+                ..Default::default()
+            })
+        )
+        .await
+        .is_err());
+    let replay_engine = engine.clone();
+    let task = tokio::spawn(async move {
+        replay_engine
+            .replay(
+                &original.id,
+                Some(EditMessage {
+                    action: "continue".into(),
+                    url: Some(format!("{base}/held")),
+                    ..Default::default()
+                }),
+            )
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), entered.notified())
+        .await
+        .unwrap();
+    let replay_id = engine
+        .list_exchanges(&session.id, None, 10, 0)
+        .unwrap()
+        .into_iter()
+        .find(|exchange| !exchange.completed)
+        .unwrap()
+        .id;
+    tokio::time::timeout(Duration::from_secs(6), engine.stop_proxy())
+        .await
+        .unwrap()
+        .unwrap();
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    let replay = engine.get_exchange(&replay_id).unwrap();
+    assert!(replay.completed);
+    assert!(replay.error.unwrap().contains("Replay interrupted"));
+    engine.delete_session(&session.id).unwrap();
+    release.notify_one();
+    fixture_task.abort();
+}
