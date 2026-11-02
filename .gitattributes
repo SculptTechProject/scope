@@ -1,5 +1,15 @@
-resources/frida/** -whitespace
-resources/device/licenses/** -whitespace
-resources/licenses/index.html -text -whitespace
-resources/licenses/rust-standard-library/COPYRIGHT-library.html -text -whitespace
-resources/licenses/rust-standard-library/licenses/*.txt -text -whitespace
+# Scripts sent to Android must retain Unix line endings on every host.
+# The vendored Frida JavaScript already uses LF; keep its documented byte hashes.
+*.sh text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.py text eol=lf
+
+# Keep source formatting checks and workflow execution stable across checkouts.
+*.rs text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Preserve upstream license files and binary assets exactly as supplied.
+resources/device/licenses/** -text
+resources/frida/licenses/** -text

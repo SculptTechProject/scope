@@ -2,7 +2,7 @@
 // Real local desktop-engine + stdio MCP integration test. No Android device or remote API.
 import assert from 'node:assert/strict';
 import { spawn, execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, access } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, access, realpath } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createTcpServer } from 'node:net';
 import { once } from 'node:events';
@@ -144,6 +144,21 @@ async function startDesktop(dataDirectory, demo) {
   try {
     const metadata = await bounded(ready.promise, 'Desktop readiness', 45_000);
     assert.equal(metadata.status, 'ready');
+    const command = metadata.mcpConfig?.mcpServers?.scope?.command;
+    assert.equal(typeof command, 'string', 'Desktop must provide an MCP executable command');
+    await access(command);
+    if (/\.app[/\\]Contents[/\\]MacOS[/\\]/.test(scopeBinary)) {
+      const expected = join(
+        dirname(scopeBinary),
+        '../Resources/resources/bin',
+        `scope-mcp${extension}`,
+      );
+      assert.equal(
+        await realpath(command),
+        await realpath(expected),
+        'A packaged desktop must resolve MCP inside its relocated application bundle',
+      );
+    }
     return { child, metadata };
   } catch (error) {
     throw new Error(`${error.message}\n${child.diagnostics}`, { cause: error });
@@ -151,8 +166,8 @@ async function startDesktop(dataDirectory, demo) {
 }
 
 class McpClient {
-  constructor(configPath) {
-    this.child = launch(mcpBinary, ['--config', configPath]);
+  constructor(configPath, executable = mcpBinary) {
+    this.child = launch(executable, ['--config', configPath]);
     this.nextId = 1;
     this.pending = new Map();
     this.lines = createInterface({ input: this.child.stdout });
@@ -302,7 +317,7 @@ try {
   });
   assert.equal(unauthorized.status, 401, 'Bridge must reject requests without its local secret');
 
-  const mcp = new McpClient(configPath);
+  const mcp = new McpClient(configPath, desktop.metadata.mcpConfig.mcpServers.scope.command);
   await mcp.initialize();
   const tools = await mcp.request('tools/list');
   for (const tool of [
@@ -421,7 +436,10 @@ try {
   assert.equal(afterStop.length, 7);
   assert.ok(afterStop.every((row) => row.error === null));
   const reopened = await startDesktop(dataDirectory, false);
-  const reopenedMcp = new McpClient(configPath);
+  const reopenedMcp = new McpClient(
+    configPath,
+    reopened.metadata.mcpConfig.mcpServers.scope.command,
+  );
   await reopenedMcp.initialize();
   assert.deepEqual(
     await reopenedMcp.tool('list_sessions'),

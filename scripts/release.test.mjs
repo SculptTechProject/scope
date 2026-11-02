@@ -27,7 +27,7 @@ test('public staging excludes optional native Frida while preserving local binar
     assert(!existsSync(join(stage, 'bin/scope-frida-worker')));
     assert(!existsSync(join(stage, 'bin/frida-server-17.9.1-android-arm64')));
     assert(existsSync(join(root, 'resources/bin/scope-frida-worker')));
-    assert(verifyPublicResources(stage).includes('device/install-runtime.py'));
+    assert(verifyPublicResources(stage).includes(join('device', 'install-runtime.py')));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

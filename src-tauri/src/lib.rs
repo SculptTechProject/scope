@@ -233,12 +233,20 @@ async fn save_export(app: &AppCore, handle: tauri::AppHandle, args: Value) -> Re
 }
 
 pub async fn headless() -> Result<()> {
-    let resources = Some(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .to_path_buf(),
-    );
+    // Use the same platform resource layout as the GUI, including relocated
+    // .app bundles, Windows installs and Linux AppImages/deb installations.
+    // The checkout fallback is only for unbundled Cargo development binaries.
+    let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+    let resources =
+        tauri::utils::platform::resource_dir(context.package_info(), &tauri::Env::default())
+            .ok()
+            .filter(|root| root.join("resources").is_dir())
+            .or_else(|| {
+                let checkout = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .parent()?
+                    .to_path_buf();
+                checkout.join("resources").is_dir().then_some(checkout)
+            });
     let app = AppCore::open(data_dir(), resources, port()).await?;
     if std::env::args().any(|s| s == "--demo-server") {
         app.ensure_demo().await?;

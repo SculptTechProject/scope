@@ -1,5 +1,8 @@
 # Scope
 
+[![Build and check](https://github.com/SculptTechProject/scope/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/SculptTechProject/scope/actions/workflows/checks.yml)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
+
 **Inspect Android HTTP traffic. Change it live. Keep every session.**
 
 Scope is an open-source desktop HTTP(S) debugger with a Rust capture engine, an Android ADB/Frida adapter, and an MCP server that lets your agent inspect the same saved evidence you see.
