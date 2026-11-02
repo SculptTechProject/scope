@@ -216,6 +216,7 @@ export default function App() {
   const [boot, setBoot] = useState<Bootstrap | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState('');
+  const sessionIdRef = useRef(sessionId);
   const [proxy, setProxy] = useState(initialProxy);
   const [device, setDevice] = useState(initialDevice);
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
@@ -228,6 +229,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [limit, setLimit] = useState(250);
   const [busy, setBusy] = useState('');
+  const [replayingId, setReplayingId] = useState('');
   const [loading, setLoading] = useState(isNative());
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -296,6 +298,7 @@ export default function App() {
     };
   }, [native]);
   useEffect(() => {
+    sessionIdRef.current = sessionId;
     setSelected(null);
     setExchanges([]);
     setLimit(250);
@@ -665,6 +668,12 @@ export default function App() {
           <div className="error-banner" role="alert">
             <Info size={15} />
             <span>{error}</span>
+            <IconButton
+              label="Copy error details"
+              onClick={() => void navigator.clipboard.writeText(error)}
+            >
+              <Copy size={14} />
+            </IconButton>
             <IconButton label="Dismiss error" onClick={() => setError('')}>
               <X size={14} />
             </IconButton>
@@ -965,16 +974,22 @@ export default function App() {
                   </div>
                   <RequestInspector
                     selected={selected}
-                    onReplay={() =>
-                      selected &&
-                      void perform('replay', async () => {
-                        const replayed = await api.replay(selected.id);
-                        await refreshSessions();
-                        setSelected(replayed);
-                        setNotice('Request replayed. This was a new outbound request.');
-                      })
-                    }
-                    busy={!!busy}
+                    onReplay={() => {
+                      if (!selected || replayingId) return;
+                      const id = selected.id;
+                      setReplayingId(id);
+                      setError('');
+                      void api
+                        .replay(id)
+                        .then(async (replayed) => {
+                          await refreshSessions();
+                          if (sessionIdRef.current === replayed.sessionId) setSelected(replayed);
+                          setNotice('Request replayed. This was a new outbound request.');
+                        })
+                        .catch((e) => setError(errorText(e)))
+                        .finally(() => setReplayingId(''));
+                    }}
+                    busy={!!busy || !!replayingId}
                   />
                 </div>
                 <footer className="traffic-footer">
@@ -1656,6 +1671,13 @@ function DevicePanel({
                   Select the bundled hook profiles for an app you own or are authorized to test.
                   Frida support depends on Android and application versions.
                 </p>
+                <div className="info-callout">
+                  <Info size={15} />
+                  <p>
+                    Frida needs an optional local runtime. If it is missing, Scope shows the setup
+                    command before changing your device. Runtime installation is a separate action.
+                  </p>
+                </div>
                 {[
                   ['certificate', 'Trust the Scope CA'],
                   ['proxy', 'Proxy configuration'],

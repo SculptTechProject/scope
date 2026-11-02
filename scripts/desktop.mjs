@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { preparePublicResources } from './public-resources.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const env = { ...process.env };
@@ -41,7 +42,13 @@ function run(command, args) {
     );
   });
 }
-await run(cargo, ['build', '-p', 'scope-mcp', ...(mode === 'build' ? ['--release'] : [])]);
+await run(cargo, [
+  'build',
+  '--locked',
+  '-p',
+  'scope-mcp',
+  ...(mode === 'build' ? ['--release'] : []),
+]);
 const binDir = join(root, 'resources/bin');
 mkdirSync(binDir, { recursive: true });
 copyFileSync(
@@ -51,4 +58,8 @@ copyFileSync(
 const tauri = join(root, 'node_modules/.bin', process.platform === 'win32' ? 'tauri.cmd' : 'tauri');
 const bundles =
   process.platform === 'darwin' ? 'app' : process.platform === 'win32' ? 'nsis' : 'appimage,deb';
-await run(tauri, [mode, ...(mode === 'build' ? ['--bundles', bundles] : [])]);
+const publicConfig = mode === 'build' ? preparePublicResources(root) : undefined;
+await run(tauri, [
+  mode,
+  ...(mode === 'build' ? ['--bundles', bundles, '--config', publicConfig] : []),
+]);

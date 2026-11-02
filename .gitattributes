@@ -1,2 +1,5 @@
 resources/frida/** -whitespace
 resources/device/licenses/** -whitespace
+resources/licenses/index.html -text -whitespace
+resources/licenses/rust-standard-library/COPYRIGHT-library.html -text -whitespace
+resources/licenses/rust-standard-library/licenses/*.txt -text -whitespace

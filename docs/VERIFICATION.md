@@ -1,6 +1,6 @@
 # Recorded verification
 
-Date: 2026-11-02. Host: macOS arm64. Local alpha, version 0.1.0.
+Date: 2026-11-02. Host: macOS arm64. Application version 0.1.0; verification baseline for prerelease `v0.1.0-alpha.1`.
 
 ## Automated checks
 
@@ -35,4 +35,8 @@ See [Android test detail](ANDROID.md#recorded-local-smoke-test). One existing ro
 
 ## Boundaries
 
-These checks establish a local functional alpha, not universal Android compatibility or production stability. Windows/Linux jobs are included but were not executed in this local run. Physical devices, long-duration sessions, WebSocket frames, HTTP3 and arbitrary native Android networking stacks were not verified. macOS public signing/notarization and a public GitHub release were not performed. Native Frida binary dependency notices retain a documented pre-release inventory limitation; see runtime notices before public binary distribution.
+These checks establish a local functional alpha, not universal Android compatibility or production stability. Windows/Linux jobs are included but were not executed in this local run. Physical devices, long-duration sessions, WebSocket frames, HTTP3 and arbitrary native Android networking stacks were not verified. The macOS artifact is not Apple-notarized.
+
+The standalone Frida worker/server checks above used a development bundle. The public `v0.1.0-alpha.1` package deliberately omits these optional native binaries because a complete artifact-specific Frida dependency notice inventory has not been established. Users can install the optional runtime locally; source integration and profiles remain included. See [Android setup](ANDROID.md#frida-runtime), [release procedure](RELEASING.md), and [third-party notices](../THIRD_PARTY_NOTICES.md).
+
+Publication and CI status are recorded by [GitHub Releases](https://github.com/SculptTechProject/scope/releases) and [Actions](https://github.com/SculptTechProject/scope/actions), separately from the local checks above.

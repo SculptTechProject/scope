@@ -6,6 +6,18 @@ The project is distributed under **AGPL-3.0-or-later**; see [LICENSE](LICENSE).
 Third-party components retain the copyright notices and license terms described below.
 The project name does not imply affiliation with HTTP Toolkit or Frida.
 
+## Rust, frontend packages and fonts
+
+Collected license texts and package/source inventories are included in
+[`resources/licenses/index.html`](resources/licenses/index.html),
+[`rust.json`](resources/licenses/rust.json) and
+[`frontend.json`](resources/licenses/frontend.json). These include the
+Manrope and IBM Plex Mono font licenses and the Lucide icon license. The
+Rust 1.99.1 standard-library notices are retained separately in
+[`resources/licenses/rust-standard-library/`](resources/licenses/rust-standard-library/).
+Each collection records its source lockfile hash; regeneration is described in
+[`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md). Third-party terms remain in force.
+
 ## HTTP Toolkit interception scripts
 
 Files: `resources/frida/config-template.js` and `resources/frida/android/*.js`.
@@ -74,9 +86,18 @@ These SHA-256 values identify the unmodified JavaScript copied from HTTP Toolkit
 
 ## Optional packaged Frida runtime
 
-The local macOS arm64 package may include `resources/bin/scope-frida-worker`
-and the unmodified official `frida-server-17.9.1-android-arm64` binary. These
-components retain their own licenses; they are not relicensed as Scope code.
+**Public alpha releases do not redistribute the native Frida worker, Python
+runtime or Android Frida server.** `npm run package` stages filtered resources
+that exclude those optional binaries. The user can explicitly run the shipped
+`resources/device/install-runtime.py` helper to download Frida from PyPI and
+the official Frida release into a private user runtime. That installation does
+not modify system Python or an Android device.
+
+A previously verified local macOS arm64 experiment included
+`resources/bin/scope-frida-worker` and the unmodified official
+`frida-server-17.9.1-android-arm64` binary. The following provenance is retained
+for that local experiment and future review; those native components are absent
+from public release artifacts and are not relicensed as Scope code.
 
 | Component | Version / origin | License text |
 | --- | --- | --- |
@@ -98,7 +119,8 @@ The older Python 3.9 developer environment optionally installs
 is retained for that case. It is absent from the Python 3.12 packaged worker.
 
 Exact release sources, pinned Frida submodules, Python distribution metadata,
-archive integrity and the remaining prebuilt-native dependency inventory limit
+archive integrity and the public distribution boundary
 are recorded in the [runtime notice index](resources/device/licenses/README.md).
-Keep that directory with binary distributions and refresh it when rebuilding
-against different runtime versions.
+Keep that directory with the integration sources. Any future redistribution of
+the optional native runtime requires a complete artifact-specific dependency and
+corresponding-source review. The public packaging checks currently reject it.

@@ -317,6 +317,19 @@ impl DeviceManager {
             logs: vec![],
         };
         self.materialize()?;
+        if mode == "frida" {
+            let abi = self
+                .command(&state.serial, &["shell", "getprop", "ro.product.cpu.abi"])
+                .await?;
+            if self.worker_version().await.is_err() {
+                let setup = self.setup_command(abi.trim());
+                self.log(format!("Optional Frida setup required: {setup}"));
+                self.inner.status.lock().unwrap().message =
+                    "Optional Frida runtime setup is required. No device settings were changed."
+                        .into();
+                bail!("Optional Frida runtime setup is required. Run this once in your terminal, then try Start again:\n{setup}\nThis creates Scope's private runtime and does not modify system Python or an Android device.");
+            }
+        }
         self.save_recovery(&state)?;
         let setup = async {
             self.command(&state.serial, &["reverse", &format!("tcp:{proxy_port}"), &format!("tcp:{proxy_port}")]).await?;
@@ -427,7 +440,7 @@ impl DeviceManager {
         Ok(())
     }
 
-    async fn install_ca(&self, state: &Recovery, cert: &PathBuf) -> Result<()> {
+    async fn install_ca(&self, state: &Recovery, cert: &std::path::Path) -> Result<()> {
         let hash = state.ca_hash.as_ref().context("Missing CA hash")?;
         let remote_cert = format!("/data/local/tmp/scope-{hash}.0");
         let remote_script = "/data/local/tmp/scope-install-ca.sh";
@@ -493,9 +506,15 @@ impl DeviceManager {
                 .command(&state.serial, &["shell", "getprop", "ro.product.cpu.abi"])
                 .await?;
             if let Some(arch) = frida_arch(&abi) {
-                local = resource_file(&format!("bin/frida-server-17.9.1-android-{arch}"));
+                let managed = self
+                    .inner
+                    .runtime
+                    .join("managed-frida")
+                    .join(format!("frida-server-17.9.1-android-{arch}"));
+                local = resource_file(&format!("bin/frida-server-17.9.1-android-{arch}"))
+                    .or_else(|| managed.is_file().then_some(managed));
                 if local.is_some() {
-                    self.log(format!("Using bundled Frida server for Android {arch}"));
+                    self.log(format!("Using available Frida server for Android {arch}"));
                 }
             }
         }
@@ -523,28 +542,7 @@ impl DeviceManager {
         let version = self
             .root_command(state, &format!("{remote} --version"))
             .await?;
-        let mut command = worker_command(&self.inner.runtime);
-        command
-            .arg("--version")
-            .stdin(Stdio::null())
-            .kill_on_drop(true);
-        let output = tokio::time::timeout(Duration::from_secs(20), command.output())
-            .await
-            .context("Frida worker version check timed out")?
-            .context("Cannot run Frida worker")?;
-        let python_version = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .find_map(|line| {
-                serde_json::from_str::<serde_json::Value>(line)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("version")
-                            .and_then(|v| v.as_str())
-                            .map(str::to_owned)
-                    })
-            })
-            .unwrap_or_default();
+        let python_version = self.worker_version().await?;
         if !python_version.is_empty() && version.trim() != python_version {
             bail!(
                 "Frida version mismatch: device {} versus Python {}. Install matching versions",
@@ -802,6 +800,45 @@ impl DeviceManager {
     fn recovery_path(&self) -> PathBuf {
         self.inner.runtime.join("device-recovery.json")
     }
+
+    async fn worker_version(&self) -> Result<String> {
+        let mut command = worker_command(&self.inner.runtime);
+        command
+            .arg("--version")
+            .stdin(Stdio::null())
+            .kill_on_drop(true);
+        let output = tokio::time::timeout(Duration::from_secs(20), command.output())
+            .await
+            .context("Frida worker version check timed out")?
+            .context("Cannot run Frida worker")?;
+        let version = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .find_map(|line| {
+                serde_json::from_str::<serde_json::Value>(line)
+                    .ok()
+                    .and_then(|value| {
+                        value
+                            .get("version")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned)
+                    })
+            });
+        version
+            .filter(|v| !v.is_empty())
+            .context("No usable optional Frida runtime was found")
+    }
+
+    fn setup_command(&self, abi: &str) -> String {
+        let installer = resource_file("device/install-runtime.py")
+            .unwrap_or_else(|| PathBuf::from("resources/device/install-runtime.py"));
+        let interpreter = if cfg!(windows) { "py -3" } else { "python3" };
+        format!(
+            "{interpreter} {} --runtime-dir {} --abi {}",
+            terminal_quote(&installer.to_string_lossy()),
+            terminal_quote(&self.inner.runtime.to_string_lossy()),
+            terminal_quote(abi)
+        )
+    }
     fn save_recovery(&self, state: &Recovery) -> Result<()> {
         fs::create_dir_all(&self.inner.runtime)?;
         let temporary = self.inner.runtime.join("device-recovery.tmp");
@@ -854,7 +891,19 @@ fn worker_command(runtime: &std::path::Path) -> Command {
     let command = if let Some(binary) = binary {
         Command::new(binary)
     } else {
-        let mut command = Command::new(python());
+        let managed = runtime.join("managed-frida/venv").join(if cfg!(windows) {
+            "Scripts/python.exe"
+        } else {
+            "bin/python"
+        });
+        let interpreter = env::var_os("SCOPE_PYTHON").unwrap_or_else(|| {
+            if managed.is_file() {
+                managed.into_os_string()
+            } else {
+                python()
+            }
+        });
+        let mut command = Command::new(interpreter);
         command.arg(runtime.join("frida_worker.py"));
         command
     };
@@ -863,6 +912,14 @@ fn worker_command(runtime: &std::path::Path) -> Command {
     #[cfg(windows)]
     command.creation_flags(0x08000000);
     command
+}
+
+fn terminal_quote(value: &str) -> String {
+    if cfg!(windows) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        adb::quote(value)
+    }
 }
 
 fn frida_arch(abi: &str) -> Option<&'static str> {

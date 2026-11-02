@@ -1,6 +1,19 @@
 {
   "name": "scope-desktop",
   "version": "0.1.0",
+  "description": "Desktop HTTP(S) debugging with persistent sessions, Android instrumentation and MCP",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SculptTechProject/scope.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SculptTechProject/scope/issues"
+  },
+  "homepage": "https://github.com/SculptTechProject/scope#readme",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "private": true,
   "type": "module",
   "scripts": {

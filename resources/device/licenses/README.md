@@ -1,8 +1,11 @@
 # Optional Android runtime notices
 
-This folder accompanies Scope's optional packaged Frida worker and Android
-`frida-server` binary. The integration source and the third-party interception
-scripts keep the separate licenses described in the root
+This folder records the provenance of Scope's prior local Frida packaging
+experiment. Public alpha releases exclude the standalone worker, embedded Python
+and Android `frida-server` binary. Users can explicitly install upstream Frida
+into Scope's private user runtime with `device/install-runtime.py`; the public
+application does not redistribute those native downloads. The integration source
+and the third-party interception scripts keep the separate licenses described in the root
 [`THIRD_PARTY_NOTICES.md`](../../../THIRD_PARTY_NOTICES.md).
 
 ## Exact license copies
@@ -71,10 +74,21 @@ copies above retain that exception verbatim. Scope does not modify Frida.
 
 ## Distribution scope
 
-Keep this directory and the root notices with binary packages. Rebuilding with
-different Python, Frida or PyInstaller versions requires refreshing these copies
-and the binary provenance. This collection records the named components and the
-complete notices delivered by the selected Python runtime archive. It is not a
-complete dependency inventory of the official Frida prebuilt native binaries;
-their statically linked dependencies still need an artifact-specific notice
-inventory before a public binary release.
+The release boundary is enforced by `scripts/public-resources.mjs`: no
+`scope-frida-worker` or `frida-server-*` binary is copied into public packages,
+even when local ignored experimental binaries exist. The public setup helper
+downloads the official version only when the user runs it, validates its pinned
+archive SHA-256 and creates a virtualenv without changing system packages.
+
+This choice follows the exact [Frida 17.9.1 SDK dependency manifest](https://github.com/frida/releng/blob/5595d3170560b98590dc0cb98d0d1c3f67e6e32d/deps.toml),
+version `20260311`. The native SDK contains more than 30 projects, including
+GLib, libiconv, libnice and V8; top-level Frida license copies alone do not cover
+all linked dependency notices or corresponding-source/relink requirements.
+Public releases therefore ship the integration and setup source, with an
+explicit user-side installation, rather than assert that this historical local
+bundle has a complete native distribution inventory.
+
+`scripts/bundle-frida.py --local-only` remains available for local experiments.
+Redistributing its output would require an artifact-specific dependency and
+corresponding-source review first. That output is not a supported public release
+asset in this alpha. See `docs/RELEASING.md` for the enforced release process.

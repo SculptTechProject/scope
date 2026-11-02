@@ -30,11 +30,33 @@ A non-rooted device can use system proxy mode for HTTP. HTTPS then depends on ma
 
 ## Frida runtime
 
-The Rust adapter and resources are cross-platform; the worker is isolated from the desktop process. The delivered macOS Apple Silicon alpha includes a standalone Frida worker and Android arm64 server, so that combination does not require a separately installed Python or environment overrides. Other platforms and Android ABIs can use the source/Python fallback below. Worker and device server must use the **same Frida version**.
+The Rust adapter and resources are designed for multiple hosts; the worker is isolated from the desktop process. **The public v0.1.0-alpha.1 app does not include a standalone Frida worker or Android server.** Install the optional runtime locally before using Frida mode. The integration source and JavaScript profiles are included; ordinary proxy capture does not require Python or Frida.
 
-Worker selection order is an explicit `SCOPE_FRIDA_WORKER` executable, an explicit `SCOPE_PYTHON` interpreter, a packaged `resources/bin/scope-frida-worker` (or `.exe`), then `python3`/`python` on PATH. Packaged resources are resolved through `SCOPE_RESOURCES`; development builds also find the repository's resources directory.
+A task-local macOS arm64 bundle with a standalone worker/server was exercised during development. That verifies the optional integration, not the contents of the public download. Worker and device server must use the **same Frida version**.
 
-From the repository root:
+### Recommended user-side setup
+
+Install Python **3.9+** with `venv` support. Find the Android ABI with `adb -s YOUR_SERIAL shell getprop ro.product.cpu.abi`, then run the included helper. For the public macOS app installed in Applications:
+
+```sh
+python3 /Applications/Scope.app/Contents/Resources/resources/device/install-runtime.py --abi arm64-v8a
+```
+
+From a source checkout:
+
+```sh
+python3 resources/device/install-runtime.py --abi arm64-v8a
+```
+
+Replace `arm64-v8a` with the ABI reported by the device (`armeabi-v7a`, `x86` and `x86_64` are also accepted). On Windows, use `py -3` instead of `python3`. Scope also reports a command with the actual resource/runtime paths when no runtime is found.
+
+The helper creates a private virtualenv under Scope's `device/managed-frida` runtime directory, installs pinned Frida 17.9.1 from PyPI and downloads the matching official Android server with a pinned SHA-256 check. It does not use system-wide pip or change the Android device. After it succeeds, retry interception; no environment variables are needed. Server push/start happens only when you start interception. `--runtime-dir` supports a custom Scope device-runtime directory.
+
+Worker precedence is an explicit `SCOPE_FRIDA_WORKER` executable, an explicit `SCOPE_PYTHON` interpreter, an optional privately packaged worker, the managed virtualenv, then `python3`/`python` on PATH. Server precedence is explicit local/device overrides, an optional privately packaged ABI match, the managed ABI match, then an existing default-port USB Frida server. Packaged resources are resolved through `SCOPE_RESOURCES`; source builds also find the repository's resources directory.
+
+### Manual environment overrides
+
+For a separately managed Python environment, from the repository root:
 
 ```sh
 python3 -m venv .venv-frida
@@ -44,7 +66,7 @@ export SCOPE_PYTHON="$PWD/.venv-frida/bin/python"
 
 On Windows, use `.venv-frida\Scripts\python.exe` and set `SCOPE_PYTHON` to its absolute path before launching Scope.
 
-With no server override, Scope checks the selected device's ABI and uses a matching packaged `frida-server-17.9.1-android-*` when available. The macOS alpha includes `arm64`. If none matches, Scope connects to an existing default-port USB Frida server and does not stop a server it did not start.
+With no server override, Scope checks the selected device's ABI and uses a matching optional packaged or managed `frida-server-17.9.1-android-*` resource when available. No native server is included in the initial public app; the recommended helper installs it locally. If none is found, Scope connects to an existing default-port USB Frida server and does not stop a server it did not start.
 
 To have Scope launch a dedicated server, download a matching official binary locally first. This helper **only downloads** and does not alter the device:
 
@@ -59,30 +81,30 @@ Start interception then copies that binary to `/data/local/tmp/scope-frida-serve
 
 Alternatively, `SCOPE_FRIDA_SERVER=/absolute/device/path/frida-server` selects an existing executable on the Android device and starts a dedicated instance. The path is validated before entering a remote shell command.
 
-### Optional standalone packaging
+### Experimental local-only standalone packaging
 
-The normal source build does not require ignored files under `resources/bin`. To produce a worker for the current desktop OS/architecture, use a redistributable Python runtime and a dedicated virtualenv:
+Public packaging excludes optional native Frida binaries from `resources/bin`. To experiment locally with a standalone worker for the current desktop OS/architecture, use a redistributable Python runtime and a dedicated virtualenv. This is not a public redistribution recipe:
 
 ```sh
 /path/to/redistributable/python3 -m venv .venv-frida-bundle
 .venv-frida-bundle/bin/python -m pip install -r resources/device/requirements-bundle-frida.txt
-.venv-frida-bundle/bin/python scripts/bundle-frida.py \
+.venv-frida-bundle/bin/python scripts/bundle-frida.py --local-only \
   --work-dir .runtime/frida-package \
   --server /absolute/path/to/matching/android/frida-server --server-arch arm64
 ```
 
 The helper runs PyInstaller, checks the resulting worker's version and copies the optional device server. It does not install dependencies or touch a device. The selected server is still pushed/started only when interception starts. `SCOPE_FRIDA_WORKER` can point to the result when packaging resources separately.
 
-The delivered worker was built with CPython 3.12.13 from python-build-standalone, Frida 17.9.1 and PyInstaller 6.22.3. It was checked with an empty environment containing only `/usr/bin:/bin` on PATH, without using a system Python, and its ad-hoc code signature verifies. It is a macOS arm64 binary; Windows, Linux and Intel macOS need their own worker builds. See the binary runtime notices and corresponding-source references in `THIRD_PARTY_NOTICES.md`.
+The locally tested optional worker used CPython 3.12.13 from python-build-standalone, Frida 17.9.1 and PyInstaller 6.22.3. It was checked with an empty environment containing only `/usr/bin:/bin` on PATH and without a system Python. It is macOS arm64 only and is not part of the public release. Windows, Linux and Intel macOS need their own worker builds. Before redistributing any optional native runtime, review the artifact-specific dependency notice requirements and corresponding-source references in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 ### Hook profiles
 
-| ID | Behavior |
-| --- | --- |
-| `proxy` | Redirect supported Java HTTP proxy configuration to Scope. |
-| `certificate` | Inject Scope's public CA into supported Java trust managers. |
-| `unpinning` | Disable supported Java certificate pinning checks, including a fallback hook. |
-| `root` | Hide selected root indicators from the instrumented app. |
+| ID            | Behavior                                                                      |
+| ------------- | ----------------------------------------------------------------------------- |
+| `proxy`       | Redirect supported Java HTTP proxy configuration to Scope.                    |
+| `certificate` | Inject Scope's public CA into supported Java trust managers.                  |
+| `unpinning`   | Disable supported Java certificate pinning checks, including a fallback hook. |
+| `root`        | Hide selected root indicators from the instrumented app.                      |
 
 An empty profile array selects `proxy`, `certificate`, `unpinning`. Explicit profiles select exactly those hooks. Root hiding is opt-in. The UI and worker report hook startup diagnostics; readiness means the Java callbacks ran, not that every possible network stack is covered.
 

@@ -110,7 +110,7 @@ impl Engine {
             .map(|e| e.id.clone())
             .collect();
         if !failed.is_empty() {
-            insights.push(json!({"kind":"error","title":format!("{} failed requests",failed.len()),"detail":"HTTP 4xx/5xx responses and capture or transport errors occurred. Open the linked exchanges to inspect the evidence.","exchangeIds":failed}));
+            insights.push(json!({"kind":"error","title":format!("{} failed request{}",failed.len(),if failed.len()==1 {""} else {"s"}),"detail":"HTTP 4xx/5xx responses and capture or transport errors occurred. Open the linked exchanges to inspect the evidence.","exchangeIds":failed}));
         }
         let slow: Vec<_> = exchanges
             .iter()
@@ -118,7 +118,7 @@ impl Engine {
             .map(|e| e.id.clone())
             .collect();
         if !slow.is_empty() {
-            insights.push(json!({"kind":"latency","title":format!("{} requests exceeded one second",slow.len()),"detail":"Duration includes time spent waiting at breakpoints and buffering response bodies; it is not pure server latency.","exchangeIds":slow}));
+            insights.push(json!({"kind":"latency","title":format!("{} request{} exceeded one second",slow.len(),if slow.len()==1 {""} else {"s"}),"detail":"Duration includes time spent waiting at breakpoints and buffering response bodies; it is not pure server latency.","exchangeIds":slow}));
         }
         for (endpoint, items) in groups.iter().filter(|(_, v)| v.len() >= 3).take(12) {
             insights.push(json!({"kind":"repeat","title":format!("{} calls to {}",items.len(),endpoint),"detail":"Repeated calls were observed. Polling, retries and user actions are possible explanations; capture alone does not establish a bug.","exchangeIds":items.iter().map(|e|&e.id).collect::<Vec<_>>()}));

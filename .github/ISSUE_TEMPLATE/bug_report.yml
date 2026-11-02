@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a reproducible capture, desktop, MCP or device problem.
+title: '[Bug]: '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use synthetic traffic and sanitized logs. Do not upload private captures, credentials, CA keys or MCP bridge tokens. For vulnerabilities, follow SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Scope version or commit
+      placeholder: 0.1.0 / commit hash
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host OS and architecture
+      placeholder: macOS 15 arm64, Windows 11 x64, Ubuntu 24.04 x64
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include a minimal local fixture or exact sanitized steps where possible.
+      placeholder: |
+        1. Create a session...
+        2. Start capture...
+        3. Send...
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Distinguish request captured, response delivered, session saved, and device cleanup.
+    validations:
+      required: true
+  - type: textarea
+    id: android
+    attributes:
+      label: Android details, if applicable
+      description: Android version, device ABI, root state, proxy/Frida mode, host worker version and device server version. Do not post a device serial if it identifies your hardware.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Remove tokens, cookies, personal data and private paths first.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed credentials, private CA keys, MCP tokens and personal capture data.
+          required: true

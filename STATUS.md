@@ -1,9 +1,13 @@
-# Scope 0.1.0 local alpha
+# Scope v0.1.0-alpha.1 status
 
-Implemented on 2026-11-02: Rust HTTP(S) interception and SQLite archive, Tauri interface, request/response editing, replay, HAR/native import/export, observed-traffic analysis/comparison, Android package selection, proxy/Frida integration and scoped MCP.
+Application version: `0.1.0`. First GitHub prerelease targets macOS arm64. See [Releases](https://github.com/SculptTechProject/scope/releases) for the published assets, checksums and release notes.
 
-Verification: 16 passing Rust tests; TypeScript production build; native macOS release bundle; release MCP end-to-end smoke; native HAR export/import and response editing; real own-APK Android proxy and Frida capture with cleanup. See [verification](docs/VERIFICATION.md).
+Implemented: Rust HTTP(S) interception and SQLite archive; native Tauri inspector; request/response editing and replay; HAR/native import/export; observed-traffic analysis/comparison; Android package selection and proxy/Frida integration; seven scoped MCP tools.
 
-Run from source: `npm ci`, then `npm run desktop`. Build: `npm run package`. macOS arm64 application is delivered beside this repository as `Scope.app`.
+The local validation baseline includes 16 passing Rust tests, a TypeScript production build, a native macOS package, real-process MCP checks, native HAR export/import and response editing, and proxy/Frida capture from the included test APK on one rooted Android emulator. [Recorded verification](docs/VERIFICATION.md) distinguishes these checks from unsupported combinations. Check [dependency review](docs/DEPENDENCIES.md) for tracked upstream advisories and maintenance warnings.
 
-Local repository only. Windows/Linux workflows are prepared but not locally executed. Public repository/release and platform signing are still separate steps.
+The public app omits optional Frida native worker/server binaries. Install the runtime locally for Frida mode; integration source and hook profiles remain included. [Android setup](docs/ANDROID.md)
+
+Windows/Linux workflows are included, but device/runtime parity is not claimed. WebSocket frames, HTTP3, unbounded/streaming bodies and long-session stability remain outside this alpha's verified coverage. The macOS package is not Apple-notarized.
+
+Development: `npm ci` then `npm run desktop`. Packaging: `npm run package`. [Contributing](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) · [Release process](docs/RELEASING.md)

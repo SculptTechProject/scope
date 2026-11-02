@@ -3017,3 +3017,14 @@ textarea::placeholder {
 .status-col {
   width: 61px;
 }
+.error-banner > span {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.error-banner > .icon-button {
+  flex-shrink: 0;
+  margin-left: 0;
+}

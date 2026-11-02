@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Optionally bundle the Frida worker for the current desktop OS/architecture.
+"""Bundle an experimental LOCAL-ONLY Frida worker for this OS/architecture.
 
 Run from a redistributable Python virtualenv with requirements-bundle-frida.txt
 installed. This does not install dependencies or contact/alter any Android device.
-The normal Rust/source build remains usable without these ignored binaries.
+The public packaging script excludes these ignored binaries until their native
+dependency/source inventory is completed. Public users use install-runtime.py.
 """
 import argparse
 import json
@@ -18,6 +19,7 @@ import sys
 def main():
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--local-only", action="store_true", required=True, help="Acknowledge that this experimental bundle is excluded from public release packaging")
     parser.add_argument("--work-dir", required=True, type=Path)
     parser.add_argument("--output-dir", type=Path, default=root / "resources/bin")
     parser.add_argument("--server", type=Path, help="Matching official Android frida-server binary to include")

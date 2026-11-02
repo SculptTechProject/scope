@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose an improvement with a concrete debugging use case.
+title: '[Feature]: '
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What debugging task is difficult today?
+      description: Describe the user workflow and where Scope falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: A small example or before/after workflow helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and scope
+      description: Other approaches, relevant platforms/protocols and any compatibility constraints.
