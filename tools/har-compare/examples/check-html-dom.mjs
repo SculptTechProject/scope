@@ -45,7 +45,12 @@ try {
   });
   assert.equal(dom.window.pwned, false);
   assert.equal(dom.window.document.querySelectorAll('script,iframe,img,object,embed,link,base,form').length, 0);
-  assert.equal(dom.window.document.querySelectorAll('[src],[href],[onerror],[onload]').length, 0);
+  assert.equal(dom.window.document.querySelectorAll('[src],[onerror],[onload]').length, 0);
+  for (const link of dom.window.document.querySelectorAll('[href]')) {
+    const target = link.getAttribute('href');
+    assert.ok(/^#[A-Za-z0-9-]+$/.test(target));
+    assert.equal(dom.window.document.querySelectorAll(target).length, 1);
+  }
   assert.equal(dom.window.document.querySelectorAll('article').length, 1);
   assert.ok(dom.window.document.body.textContent.includes('<script>globalThis.pwned=true'));
   assert.ok(!dom.window.document.body.textContent.includes('SYNTHETIC_BODY_SECRET'));

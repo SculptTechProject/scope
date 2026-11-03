@@ -1,3 +1,4 @@
+import { queryIdentity } from './query.mjs';
 import { parseJsonSafe } from '../json/parse.mjs';
 import { AnalysisError } from './errors.mjs';
 import { constants } from 'node:fs';
@@ -5,7 +6,7 @@ import { open } from 'node:fs/promises';
 import { TextDecoder } from 'node:util';
 import { fail, isObject, LIMITS } from './config.mjs';
 
-const utf8 = new TextDecoder('utf-8', { fatal: true });
+const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 /** Read at most limit + 1 bytes even if a file grows after stat; reject devices/FIFOs. */
 export async function readJsonFile(path, limit, label) {
   let handle;
@@ -22,7 +23,6 @@ export async function readJsonFile(path, limit, label) {
     }
     if (bytes > limit) fail('LIMIT', `${label} exceeds its byte limit.`);
     const text = utf8.decode(buffer.subarray(0, bytes));
-    boundDocumentNesting(text);
     return parseJson(text, label);
   } catch (error) {
     if (error instanceof AnalysisError) throw error;
@@ -45,7 +45,7 @@ function boundDocumentNesting(text) {
 }
 function parseJson(text, label) {
   boundDocumentNesting(text);
-  return parseJsonSafe(text, label);
+  return parseJsonSafe(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text, label);
 }
 function validateTree(value, budget, depth = 0) {
   if (depth > LIMITS.depth || ++budget.nodes > LIMITS.nodes) fail('LIMIT', 'JSON body exceeds depth or per-capture node limit.');
@@ -83,6 +83,7 @@ function body(response, method, index, budget) {
       if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(text)) fail('ENCODING', `Entry ${index}: malformed base64 body.`);
       const decoded = Buffer.from(text, 'base64');
       decodedBytes = decoded.length;
+      if (decodedBytes > LIMITS.bodyBytes) fail('LIMIT', `Entry ${index}: body exceeds its decoded byte limit.`);
       if (decoded.toString('base64') !== text) fail('ENCODING', `Entry ${index}: non-canonical base64 body.`);
       try { text = utf8.decode(decoded); } catch { fail('ENCODING', `Entry ${index}: body is not valid UTF-8.`); }
     }
@@ -117,12 +118,11 @@ export function requestIdentity(item, index) {
   const { request } = item;
   if (typeof request.method !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,32}$/u.test(request.method)) fail('HAR', `Entry ${index}: invalid method.`);
   const method = request.method.toUpperCase();
-  if (typeof request.url !== 'string' || request.url.length > 4096 || /[\u0000-\u0020\u007f]/u.test(request.url)) fail('HAR', `Entry ${index}: invalid URL.`);
+  if (typeof request.url !== 'string' || request.url.length > 4096 || !request.url.isWellFormed() || /[\u0000-\u0020\u007f]/u.test(request.url)) fail('HAR', `Entry ${index}: invalid URL.`);
   let url;
   try { url = new URL(request.url); } catch { fail('HAR', `Entry ${index}: invalid URL.`); }
   if (!['http:', 'https:'].includes(url.protocol)) fail('HAR', `Entry ${index}: only HTTP(S) URLs are supported.`);
-  url.searchParams.sort();
-  return { method, url };
+  return { method, url, query: queryIdentity(url.search) };
 }
 
 export function isJsonMime(mimeType) {
@@ -136,7 +136,7 @@ export function parseHar(raw, config = {}) {
   const entries = [], matchedSelectors = new Set();
   rawEntries.forEach((item, offset) => {
     const index = offset + 1;
-    const { method, url } = requestIdentity(item, index);
+    const { method, url, query } = requestIdentity(item, index);
     if (config.includeOperations) {
       const selector = config.includeOperations.findIndex(s => s.method === method && s.origin === url.origin && s.path === url.pathname);
       if (selector === -1) return;
@@ -146,7 +146,7 @@ export function parseHar(raw, config = {}) {
     if (!isObject(response)) fail('HAR', `Entry ${index}: missing response.`);
     if (!Number.isInteger(response.status) || response.status < 100 || response.status > 599) fail('HAR', `Entry ${index}: missing or invalid HTTP status.`);
     if (response.status < 200) fail('INCOMPLETE', `Entry ${index}: no supported final HTTP response was captured.`);
-    const key = JSON.stringify([method, url.origin, url.pathname, url.searchParams.toString()]);
+    const key = JSON.stringify([method, url.origin, url.pathname, query]);
     entries.push({ key, method, origin: url.origin, path: url.pathname, hasQuery: url.search !== '', status: response.status, body: body(response, method, index, budget), evidence: scopeEvidence(item._scope, index) });
   });
   return { entries, totalEntries: rawEntries.length, matchedSelectors };

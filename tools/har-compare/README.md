@@ -160,8 +160,8 @@ node tools/har-compare/cli.mjs compare \
 ## Matching and repeated operations
 
 - Keys are uppercase HTTP method + WHATWG URL origin + exact pathname + query
-  pairs sorted by parameter name. Scheme and non-default port remain distinct.
-  Default ports and URL encoding follow Node's WHATWG URL normalization.
+  pairs sorted by decoded parameter name (with a lossless byte fallback for non-UTF-8 names). Scheme and non-default port remain distinct.
+  Default ports and pathname encoding follow Node's WHATWG URL normalization. Query identity preserves form-decoded octets, including non-UTF-8 bytes; it never substitutes replacement characters. Raw unpaired UTF-16 surrogate URLs fail closed before URL conversion.
 - Query **values participate internally** to prevent unrelated variants from
   being merged, but names and values never enter reports. Duplicate parameter
   order is retained. Fragment and URL userinfo do not participate.
@@ -274,8 +274,9 @@ selectedEntries, excludedEntries}` for baseline and candidate. HTML displays the
 same counts and an explicit scope warning. Evidence always uses original HAR
 indices. Only aggregate excluded counts are reported; excluded URLs, headers
 and bodies are omitted. Configured origin/path selectors can themselves be
-sensitive and are included in the report. Without selection, the original JSON
-and HTML example bytes are unchanged.
+sensitive and are included in the report. Selection does not change the unscoped analysis JSON. The sprint report layout
+updates HTML presentation intentionally; identical input/config/source still
+produce byte-identical reports.
 
 ## HAR support and limits
 
@@ -288,7 +289,10 @@ HTML pages and binary assets require explicit operation selection (below).
 Without selection, every entry is analyzed and unsupported bodies still fail.
 
 Bodies use `response.content.text`; absent/null `encoding` means plain text.
-Canonical padded `base64` is supported, decoded as strict UTF-8. Compressed or
+Canonical padded `base64` is supported, decoded as strict UTF-8. A single
+leading UTF-8 document BOM is accepted for JSON in either representation, counts
+toward the original decoded-byte limit, and is not treated as an empty body.
+Interior BOM characters remain data; multiple leading BOMs are rejected. Compressed or
 unknown encodings are rejected. Empty HEAD/204/205/304 responses are allowed;
 other explicitly empty non-JSON responses require `text: ""` and `size: 0`.
 Known nonnegative `content.size` must match captured decoded bytes; omitted or
@@ -327,8 +331,8 @@ non-regular files (including FIFOs) are rejected.
 ## Privacy and offline HTML
 
 Reports exclude authorization headers, all cookies, request/response body
-values, URL credentials, query parameters and fragments. No captured URL is a
-clickable link. HTML escapes captured strings (including script-closing text),
+values, URL credentials, query parameters and fragments. Captured URLs are never link destinations; report navigation uses only local
+anchors. HTML escapes captured strings (including script-closing text),
 contains no scripts, and uses a restrictive CSP with a hash for its static CSS.
 It needs no external image, font, script or stylesheet.
 

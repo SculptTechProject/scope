@@ -138,3 +138,35 @@ GitHub account rename was reconciled through MCP get_me and repository metadata:
 `dalkedev`, same numeric ID150788324. Canonical draft URL is now
 https://github.com/dalkedev/scope/pull/18 . At recovery all8existing checks for
 1a6b71b were SUCCESS; this does not establish results for later commits.
+
+### Recovered query identity and report layout increment
+
+A fresh independent review reproduced a false-clean query matching case:
+URLSearchParams replaces invalid UTF-8 bytes, merging distinct `%FF`/`%FE`
+values. Request matching and inspect inventory now use lossless form-decoded
+byte pairs with stable name ordering; raw unpaired UTF-16 surrogate URLs fail
+before lossy URL construction. Name BOMs are preserved as data. Eight process
+regression tests were observed RED→GREEN; an independent39-case compare/inspect
+corpus passed, including byte-valued names/values, duplicate ordering, plus/space,
+one decoding pass, malformed percent literals and Unicode/BOM boundaries.
+
+HTML presentation now groups findings by operation, adds a coverage table and
+valid local navigation, and distinguishes authored required/allowed values from
+observed before/after evidence. Three structural regression tests were observed
+RED→GREEN. All six example HTML files were deliberately refreshed, with their
+analysis JSON bytes asserted unchanged. Isolated jsdom execution/resource tests
+pass with only valid local anchors; no real-browser screenshot/CSP claim.
+
+Fresh integrated product suite at this checkpoint:173/173 passed. The independent
+quality catalog additionally killed16/16 concrete behavioral mutants on frozen
+source snapshots with green named controls and stable live-source digests;
+this is bounded mutation evidence, not an exhaustive score.
+
+Encoding parity review additionally reproduced BOM-dependent plain/base64
+inconsistency and a bounded1–2byte decoded-size cap bypass. The UTF-8 decoder now
+preserves BOM bytes through bodyless and byte-limit validation, then exactly one
+leading JSON document BOM is normalized consistently for both representations.
+Five black-box tests were observed RED→GREEN. A separate20-case /60-execution
+matrix passed plain/base64/cross comparisons, HEAD204 rejection, multiple BOMs,
+interior BOM data and exact/over-limit ASCII, multibyte and emoji byte boundaries.
+Fresh product suite after these corrections:178/178 passed.

@@ -5,13 +5,13 @@ import { harEntries, isJsonMime, requestIdentity } from './input.mjs';
 export function inspectHar(raw) {
   const entries = harEntries(raw), groups = new Map();
   for (const [offset, entry] of entries.entries()) {
-    const { method, url } = requestIdentity(entry, offset + 1);
+    const { method, url, query } = requestIdentity(entry, offset + 1);
     const selector = { method, origin: url.origin, path: url.pathname };
     const key = JSON.stringify(selector);
     if (!groups.has(key)) groups.set(key, { selector, entries: [], queries: new Set(), statuses: new Map(), unavailableStatuses: 0, jsonResponses: 0, missingJsonBodies: 0, otherResponses: 0 });
     const group = groups.get(key), response = entry.response;
     group.entries.push(offset + 1);
-    group.queries.add(url.searchParams.toString());
+    group.queries.add(query);
     if (isObject(response) && Number.isInteger(response.status) && response.status >= 100 && response.status <= 599) group.statuses.set(response.status, (group.statuses.get(response.status) ?? 0) + 1);
     else group.unavailableStatuses++;
     if (isObject(response?.content) && isJsonMime(response.content.mimeType)) {
