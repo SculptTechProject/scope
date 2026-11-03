@@ -50,7 +50,7 @@ Execution: inline with TDD, then independent whole-prototype review.
   runnable example workflow under examples only, English README and limits.
 - [x] Independent review: inspect adversarial input, matching ambiguity, ignore
   mistakes, output writes and CI behavior; reproduce/fix substantive findings.
-- [ ] Verify affected suite and available repository checks; commit/push only the
+- [x] Verify affected suite and available repository checks; commit/push only the
   feature branch, create/read back draft PR, save product outcome in agent memory.
 
 ## Review focus and evidence ledger
@@ -74,3 +74,9 @@ Independent review: two P2 incomplete-analysis findings reproduced and fixed wit
 RED→GREEN tests: interim HTTP statuses and contradictory decoded body sizes.
 Final suite 45/45; required demos still 1/1/0/1 and reports unchanged. Actual
 example shell blocks locally preserve exit codes 0/1/2; no remote CI claim.
+
+Delivery: feature implementation commit `e14ddfc9d87209f7390574ca77022e2218ab25cc`
+pushed to `szpont/scope-ci-experiment`; draft PR
+https://github.com/SculptTechProject/scope/pull/18 read back as OPEN/draft against
+main. Existing repository checks started automatically; no successful remote
+result claimed. Final source/doc commit is visible in the PR.
