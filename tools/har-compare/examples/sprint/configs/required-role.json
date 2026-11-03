@@ -1,0 +1,15 @@
+{
+  "contracts": [
+    {
+      "method": "GET",
+      "origin": "https://synthetic.invalid",
+      "path": "/users",
+      "requiredJson": [
+        {
+          "pointer": "/user/role",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}
