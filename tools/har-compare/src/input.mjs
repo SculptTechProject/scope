@@ -1,3 +1,5 @@
+import { parseJsonSafe } from '../json/parse.mjs';
+import { AnalysisError } from './errors.mjs';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { TextDecoder } from 'node:util';
@@ -23,7 +25,7 @@ export async function readJsonFile(path, limit, label) {
     boundDocumentNesting(text);
     return parseJson(text, label);
   } catch (error) {
-    if (error.code && ['LIMIT', 'JSON'].includes(error.code)) throw error;
+    if (error instanceof AnalysisError) throw error;
     fail('INPUT', `${label} could not be read as UTF-8 JSON.`);
   } finally { await handle?.close(); }
 }
@@ -42,7 +44,8 @@ function boundDocumentNesting(text) {
   }
 }
 function parseJson(text, label) {
-  try { return JSON.parse(text); } catch { fail('JSON', `${label} contains malformed JSON.`); }
+  boundDocumentNesting(text);
+  return parseJsonSafe(text, label);
 }
 function validateTree(value, budget, depth = 0) {
   if (depth > LIMITS.depth || ++budget.nodes > LIMITS.nodes) fail('LIMIT', 'JSON body exceeds depth or per-capture node limit.');
@@ -92,8 +95,7 @@ function body(response, method, index, budget) {
   }
   if (text !== undefined && content.size !== undefined && content.size >= 0 && content.size !== decodedBytes) fail('INCOMPLETE', `Entry ${index}: declared content size differs from captured decoded bytes.`);
   if (typeof content.mimeType !== 'string') fail('BODY', `Entry ${index}: response MIME type is unavailable.`);
-  const mime = content.mimeType.split(';', 1)[0].trim().toLowerCase();
-  const json = /^application\/(?:json|[a-z0-9!#$&^_.+-]+\+json)$/u.test(mime);
+  const json = isJsonMime(content.mimeType);
   if (!json) {
     if (text === '' && content.size === 0) return { kind: 'empty' };
     fail('BODY', `Entry ${index}: only JSON or explicitly empty response bodies are supported.`);
@@ -103,32 +105,49 @@ function body(response, method, index, budget) {
   validateTree(value, budget);
   return { kind: 'json', value };
 }
-export function parseHar(raw, config = {}) {
+export function harEntries(raw) {
   if (!isObject(raw) || !isObject(raw.log) || !Array.isArray(raw.log.entries)) fail('HAR', 'Expected a HAR object containing log.entries.');
   if (raw.log.entries.length > LIMITS.entries) fail('LIMIT', 'HAR exceeds 2000 entries.');
+  return raw.log.entries;
+}
+
+/** Request-only identity for discovery and selection; raw query/userinfo stay internal. */
+export function requestIdentity(item, index) {
+  if (!isObject(item) || !isObject(item.request)) fail('HAR', `Entry ${index}: missing request.`);
+  const { request } = item;
+  if (typeof request.method !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,32}$/u.test(request.method)) fail('HAR', `Entry ${index}: invalid method.`);
+  const method = request.method.toUpperCase();
+  if (typeof request.url !== 'string' || request.url.length > 4096 || /[\u0000-\u0020\u007f]/u.test(request.url)) fail('HAR', `Entry ${index}: invalid URL.`);
+  let url;
+  try { url = new URL(request.url); } catch { fail('HAR', `Entry ${index}: invalid URL.`); }
+  if (!['http:', 'https:'].includes(url.protocol)) fail('HAR', `Entry ${index}: only HTTP(S) URLs are supported.`);
+  url.searchParams.sort();
+  return { method, url };
+}
+
+export function isJsonMime(mimeType) {
+  if (typeof mimeType !== 'string') return false;
+  return /^application\/(?:json|[a-z0-9!#$&^_.+-]+\+json)$/u.test(mimeType.split(';', 1)[0].trim().toLowerCase());
+}
+
+export function parseHar(raw, config = {}) {
+  const rawEntries = harEntries(raw);
   const budget = { nodes: 0 };
   const entries = [], matchedSelectors = new Set();
-  raw.log.entries.forEach((item, offset) => {
+  rawEntries.forEach((item, offset) => {
     const index = offset + 1;
-    if (!isObject(item) || !isObject(item.request)) fail('HAR', `Entry ${index}: missing request.`);
-    const { request, response } = item;
-    if (typeof request.method !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,32}$/u.test(request.method)) fail('HAR', `Entry ${index}: invalid method.`);
-    const method = request.method.toUpperCase();
-    if (typeof request.url !== 'string' || request.url.length > 4096 || /[\u0000-\u0020\u007f]/u.test(request.url)) fail('HAR', `Entry ${index}: invalid URL.`);
-    let url;
-    try { url = new URL(request.url); } catch { fail('HAR', `Entry ${index}: invalid URL.`); }
-    if (!['http:', 'https:'].includes(url.protocol)) fail('HAR', `Entry ${index}: only HTTP(S) URLs are supported.`);
+    const { method, url } = requestIdentity(item, index);
     if (config.includeOperations) {
       const selector = config.includeOperations.findIndex(s => s.method === method && s.origin === url.origin && s.path === url.pathname);
       if (selector === -1) return;
       matchedSelectors.add(selector);
     }
+    const response = item.response;
     if (!isObject(response)) fail('HAR', `Entry ${index}: missing response.`);
     if (!Number.isInteger(response.status) || response.status < 100 || response.status > 599) fail('HAR', `Entry ${index}: missing or invalid HTTP status.`);
     if (response.status < 200) fail('INCOMPLETE', `Entry ${index}: no supported final HTTP response was captured.`);
-    url.searchParams.sort(); // Stable among equal keys: repeated parameter order is significant.
     const key = JSON.stringify([method, url.origin, url.pathname, url.searchParams.toString()]);
     entries.push({ key, method, origin: url.origin, path: url.pathname, hasQuery: url.search !== '', status: response.status, body: body(response, method, index, budget), evidence: scopeEvidence(item._scope, index) });
   });
-  return { entries, totalEntries: raw.log.entries.length, matchedSelectors };
+  return { entries, totalEntries: rawEntries.length, matchedSelectors };
 }

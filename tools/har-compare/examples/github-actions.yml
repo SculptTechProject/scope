@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: '22.22.3'
       - name: Test the offline tool
-        run: node --test tools/har-compare/test/*.test.mjs
+        run: npm test --prefix tools/har-compare
       - name: Compare synthetic timestamp scenario
         id: compare
         shell: bash
@@ -32,7 +32,8 @@ jobs:
             --candidate tools/har-compare/examples/fixtures/timestamp.har \
             --config tools/har-compare/examples/fixtures/ignore-timestamp.json \
             --json tools/har-compare/out/analysis.json \
-            --html tools/har-compare/out/report.html
+            --html tools/har-compare/out/report.html \
+            --junit tools/har-compare/out/results.xml
           result=$?
           echo "exit_code=$result" >> "$GITHUB_OUTPUT"
           exit 0
@@ -44,6 +45,7 @@ jobs:
           path: |
             tools/har-compare/out/analysis.json
             tools/har-compare/out/report.html
+            tools/har-compare/out/results.xml
           if-no-files-found: warn
           retention-days: 3
       - name: Propagate comparison status

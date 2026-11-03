@@ -102,3 +102,39 @@ At the start of this continuation all 8 existing GitHub checks at base
 `afb8e4ac7a998b128eaa1f63eabc64db53e9f421` had completed SUCCESS, including
 macOS/Windows/Linux checks and CodeQL. New-head status must be read back after
 push; the base result alone is not evidence that the continuation passed CI.
+
+## Multi-agent sprint recovery checkpoint
+
+2026-11-03, owner job1567256898258866317, manually recovered by
+1567269938568368222 after the earlier20-minute process timeout. Saved working
+tree and remote state were reconciled before any write; no push/publication
+from the interrupted sprint was assumed or repeated.
+
+Fresh product suite: **162/162 passed** after recovery. Scope includes request
+inventory/config templates, explicit authored status/JSON-type requirements,
+operation-scoped ignores, duplicate-key/decimal-round-trip rejection and JUnit
+export. This includes direct module tests and black-box CLI integration.
+
+Existing report demos still reproduce, and protected root dependencies,
+Cargo.lock, active workflows, core and license have no diff from1a6b71b.
+Independent static/parser probes and fixed six behavioral mutations were run on
+recorded source snapshots; future quality/lab checkpoints report their own
+versions and fresh outcomes rather than generalizing these receipts.
+
+The artifact-only pinned Rust1.99.1 and Zig0.17.1 environment ran
+`cargo fmt --all -- --check` successfully and
+`cargo test --workspace --exclude scope-desktop --locked` successfully:
+**47 tests** (core22,device23,mcp2). No system package or global toolchain/config
+change; root Cargo.lock hash stayed unchanged. Desktop/GUI was explicitly
+excluded because GTK/WebKit/pkg-config host prerequisites are unavailable.
+Toolchain receipts/commands remain private task artifacts, not source archives.
+
+Normal sandbox-enabled Chromium/Firefox launches remain blocked on this host.
+The lab provides actual synthetic loopback HTTP capture, positive no-replay
+controls and independent XML parsing; these are not browser screenshots or
+runtime-CSP evidence. No sandbox-disabling or host-security change was made.
+
+GitHub account rename was reconciled through MCP get_me and repository metadata:
+`dalkedev`, same numeric ID150788324. Canonical draft URL is now
+https://github.com/dalkedev/scope/pull/18 . At recovery all8existing checks for
+1a6b71b were SUCCESS; this does not establish results for later commits.

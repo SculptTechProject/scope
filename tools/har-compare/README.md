@@ -18,7 +18,7 @@ From the repository root:
 ```sh
 node tools/har-compare/cli.mjs --help
 node tools/har-compare/cli.mjs doctor
-node --test tools/har-compare/test/*.test.mjs
+npm test --prefix tools/har-compare
 node tools/har-compare/examples/run-demo.mjs
 ```
 
@@ -124,6 +124,39 @@ in analysis output. IDs and ordering are deterministic for identical inputs and
 config; IDs are report-local, not permanent identities across different captures.
 Evidence entry numbers are 1-based indices in each original `log.entries` array.
 
+## Additional CI and discovery tools
+
+- [`inspect --input HAR`](docs/inspect.md): request inventory and a bounded
+  operation-selection template; explicitly not a response analysis.
+- [Authored contracts](contracts/README.md): exact operation status allowlists
+  and required JSON pointer/types, independent of observational deltas/ignores.
+- [Scoped JSON ignores](docs/scoped-ignores.md): ignore a pointer only at the
+  specified method/origin/path, with isolated usage validation.
+- [`--junit NEW_FILE`](formats/README.md): deterministic JUnit XML alongside
+  JSON/HTML, with findings/evidence and safe XML escaping.
+- [Isolated local test lab](lab/README.md): separately locked development tools,
+  real synthetic localhost HTTP capture, detector controls and offline analysis.
+- [Two-hour sprint decisions](docs/sprint-plan.md): scope and evidence plan.
+
+The CLI remains dependency-free; lab/browser tooling is optional and separate.
+Authored `contracts` are user requirements, not a schema inferred from traffic.
+For example, add an allowed status to catch an unchanged HTTP500:
+
+```json
+{"contracts":[{"method":"GET","origin":"https://api.example.invalid","path":"/users/7","allowedStatuses":[200]}]}
+```
+
+Produce all report formats using distinct new paths:
+
+```sh
+node tools/har-compare/cli.mjs compare \
+  --baseline tools/har-compare/examples/fixtures/baseline.har \
+  --candidate tools/har-compare/examples/fixtures/missing-field.har \
+  --json tools/har-compare/out/analysis.json \
+  --html tools/har-compare/out/report.html \
+  --junit tools/har-compare/out/results.xml
+```
+
 ## Matching and repeated operations
 
 - Keys are uppercase HTTP method + WHATWG URL origin + exact pathname + query
@@ -146,7 +179,7 @@ Evidence entry numbers are 1-based indices in each original `log.entries` array.
 
 ## Assertions and noise configuration
 
-The JSON config accepts only `mode`, `ignoreJsonPaths`, and `includeOperations`. Noise controls:
+The JSON config accepts `mode`, `ignoreJsonPaths`, `includeOperations`, `scopedIgnores` and `contracts`. Noise controls:
 
 ```json
 { "mode": "strict", "ignoreJsonPaths": ["/timestamp", "/user/lastSeen"] }
@@ -282,10 +315,12 @@ no archive, CA state or `Engine::open` is used.
 | Ignore pointers | 100, each up to 1,024 code units |
 | Findings / serialized finding evidence | 10,000 / 4 MiB |
 
-Node's JSON parser uses IEEE-754 numbers and last-member-wins semantics for
-duplicate object keys. Unsafe integer results and non-finite numbers are
-rejected; decimal precision still follows JavaScript. Avoid duplicate keys and
-use strings for precision-sensitive numeric identifiers. Limits fail with exit
+The JSON reader rejects duplicate decoded object names and numeric tokens that
+lose mathematical decimal value through the JavaScript parse/stringify round
+trip, including underflow. Ordinary decimals such as0.1 and equivalent spellings
+such as1.00/1e0 remain accepted. Unsafe integer body values remain rejected.
+See [safe JSON policy](json/README.md) for exact bounds and semantics.
+Limits fail with exit
 2 instead of truncating findings. File reads remain bounded if a file grows;
 non-regular files (including FIFOs) are rejected.
 
@@ -316,7 +351,7 @@ dispatch the workflow. A local successful demo is not a remotely executed CI run
 ## Development and validation
 
 ```sh
-node --test test/*.test.mjs
+npm test
 node examples/run-demo.mjs
 ```
 

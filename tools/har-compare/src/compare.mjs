@@ -16,7 +16,9 @@ export function compareHar(baseline, candidate, config) {
   const keys = [...new Set([...left.keys(), ...right.keys()])].sort(compareText);
   const findings = [], operations = [], notices = [];
   const hits = new Map(config.ignoreJsonPaths.map(p => [p, 0]));
-  let ignoredNodes = 0, pairs = 0, findingBytes = 0;
+  const scopedRules = config.scopedIgnores ?? [];
+  const scopedHits = new Map(scopedRules.flatMap((r, i) => r.pointers.map(p => [`${i}:${p}`, 0])));
+  let ignoredNodes = 0, scopedIgnoredNodes = 0, pairs = 0, findingBytes = 0;
   function add(operation, occurrence, evidence, finding) {
     if (findings.length >= LIMITS.findings) fail('LIMIT', 'Comparison exceeds 10000 findings.');
     const result = { id: `finding-${String(findings.length + 1).padStart(5, '0')}`, operation, occurrence, evidence, ...finding };
@@ -24,21 +26,24 @@ export function compareHar(baseline, candidate, config) {
     if (findingBytes > 4 * 1024 * 1024) fail('LIMIT', 'Finding evidence exceeds the 4 MiB report budget.');
     findings.push(result);
   }
-  function walk(a, b, path, addFinding) {
+  function walk(a, b, path, addFinding, scope) {
     if (hits.has(path)) { hits.set(path, hits.get(path) + 1); ignoredNodes++; return; }
+    if (scope?.has(path)) { const key = scope.get(path); scopedHits.set(key, scopedHits.get(key) + 1); ignoredNodes++; scopedIgnoredNodes++; return; }
     if (a === absent) { addFinding({ kind: 'field-added', severity: 'info', path, types: { after: kind(b) } }); return; }
     if (b === absent) { addFinding({ kind: 'field-removed', severity: 'regression', path, types: { before: kind(a) } }); return; }
     if (kind(a) !== kind(b)) { addFinding({ kind: 'type-changed', severity: 'regression', path, types: { before: kind(a), after: kind(b) } }); return; }
     if (Array.isArray(a)) {
       if (a.length !== b.length) addFinding({ kind: 'array-length-changed', severity: 'regression', path });
-      for (let i = 0; i < Math.max(a.length, b.length); i++) walk(i < a.length ? a[i] : absent, i < b.length ? b[i] : absent, `${path}/${i}`, addFinding);
+      for (let i = 0; i < Math.max(a.length, b.length); i++) walk(i < a.length ? a[i] : absent, i < b.length ? b[i] : absent, `${path}/${i}`, addFinding, scope);
     } else if (a !== null && typeof a === 'object') {
       const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort(compareText);
-      for (const key of keys) walk(Object.hasOwn(a, key) ? a[key] : absent, Object.hasOwn(b, key) ? b[key] : absent, `${path}/${pointerPart(key)}`, addFinding);
+      for (const key of keys) walk(Object.hasOwn(a, key) ? a[key] : absent, Object.hasOwn(b, key) ? b[key] : absent, `${path}/${pointerPart(key)}`, addFinding, scope);
     } else if (config.mode === 'strict' && a !== b) addFinding({ kind: 'value-changed', severity: 'regression', path });
   }
   for (const [offset, key] of keys.entries()) {
     const a = left.get(key) ?? [], b = right.get(key) ?? [], sample = a[0] ?? b[0];
+    const scopeIndex = scopedRules.findIndex(r => r.method === sample.method && r.origin === sample.origin && r.path === sample.path);
+    const scope = scopeIndex < 0 ? undefined : new Map(scopedRules[scopeIndex].pointers.map(p => [p, `${scopeIndex}:${p}`]));
     const operation = `operation-${String(offset + 1).padStart(4, '0')}`;
     operations.push({ id: operation, method: sample.method, origin: sample.origin, path: sample.path, queryValuesOmitted: sample.hasQuery, baseline: a.map(e => e.evidence), candidate: b.map(e => e.evidence) });
     if (a.length > 1 || b.length > 1) notices.push({ kind: 'ordinal-pairing', operation });
@@ -54,16 +59,17 @@ export function compareHar(baseline, candidate, config) {
       pairs++;
       if (before.status !== after.status) emit({ kind: before.status < 400 && after.status >= 400 ? 'http-failure' : 'status-changed', severity: after.status >= 400 ? 'regression' : 'info', status: { before: before.status, after: after.status } });
       if (before.body.kind !== after.body.kind) emit({ kind: 'body-kind-changed', severity: 'regression', types: { before: before.body.kind, after: after.body.kind } });
-      else if (before.body.kind === 'json') walk(before.body.value, after.body.value, '', emit);
+      else if (before.body.kind === 'json') walk(before.body.value, after.body.value, '', emit, scope);
     }
   }
   if ([...hits.values()].some(n => n === 0)) fail('IGNORE_UNUSED', 'An ignore pointer did not match a compared JSON node; check spelling and parent changes.');
+  if ([...scopedHits.values()].some(n => n === 0)) fail('IGNORE_UNUSED', 'A scoped ignore pointer did not match within its own compared operation.');
   const regressions = findings.filter(f => f.severity === 'regression').length;
   return {
     schemaVersion: 1,
     tool: 'scope-har-compare',
     config,
-    summary: { baselineEntries: baseline.length, candidateEntries: candidate.length, pairedEntries: pairs, operations: operations.length, regressions, informational: findings.length - regressions, ignoredNodes },
+    summary: { baselineEntries: baseline.length, candidateEntries: candidate.length, pairedEntries: pairs, operations: operations.length, regressions, informational: findings.length - regressions, ignoredNodes, ...(scopedRules.length ? { scopedIgnoredNodes } : {}) },
     notices,
     operations,
     findings,
