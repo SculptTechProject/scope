@@ -22,7 +22,7 @@ node --test tools/har-compare/test/*.test.mjs
 node tools/har-compare/examples/run-demo.mjs
 ```
 
-The demo checks all four expected outcomes and compares generated JSON/HTML
+The demo checks the four original outcomes plus selected, clean and unfiltered mixed-HAR cases and compares generated JSON/HTML
 bytes with the checked-in [synthetic example reports](examples/reports/). It
 writes new reports under `tools/har-compare/out/demo-*/` on each run.
 
@@ -31,6 +31,9 @@ missing-field: exit 1, 1 regression candidates
 http-500: exit 1, 1 regression candidates
 timestamp-ignored: exit 0, 0 regression candidates
 timestamp-strict: exit 1, 1 regression candidates
+mixed-selected: exit 1, 1 regression candidates
+mixed-clean: exit 0, 0 regression candidates
+mixed-unfiltered: exit 2, unsupported body analysis rejected
 ```
 
 For the prepared VPS runtime, prefix these commands with:
@@ -112,7 +115,7 @@ Successful envelope (abridged):
 Errors use `{"schemaVersion":1,"error":{"code":"BODY","message":"Entry 1: JSON body was not captured."}}`
 (with normal pretty formatting). Codes include `ARGUMENT`, `CONFIG`,
 `IGNORE_UNUSED`, `INPUT`, `JSON`, `HAR`, `BODY`, `ENCODING`, `NUMBER`,
-`INCOMPLETE`, `LIMIT`, `OUTPUT`, `RUNTIME`, and the fallback `ANALYSIS`.
+`INCOMPLETE`, `LIMIT`, `OUTPUT`, `RUNTIME`, `SELECTION_EMPTY`, `SELECTION_UNUSED`, and the fallback `ANALYSIS`.
 Messages exclude original file paths, URLs, body/parser excerpts and stack traces.
 `doctor` returns `{schemaVersion, tool, offline, authRequired, node, limits}`.
 
@@ -143,7 +146,7 @@ Evidence entry numbers are 1-based indices in each original `log.entries` array.
 
 ## Assertions and noise configuration
 
-Config is a JSON object with only these optional fields:
+The JSON config accepts only `mode`, `ignoreJsonPaths`, and `includeOperations`. Noise controls:
 
 ```json
 { "mode": "strict", "ignoreJsonPaths": ["/timestamp", "/user/lastSeen"] }
@@ -173,14 +176,83 @@ A pointer must be reached in at least one compared response: if its entire
 parent disappears or changes type, analysis fails with `IGNORE_UNUSED` rather
 than silently claiming that a typo worked. Input validation runs before ignores.
 
+## Mixed browser HAR: explicit operation selection
+
+A browser HAR often contains a document, CSS, images and API calls. Select the
+API operations deliberately instead of automatically ignoring non-JSON data:
+
+```json
+{
+  "mode": "strict",
+  "ignoreJsonPaths": ["/timestamp"],
+  "includeOperations": [
+    { "method": "GET", "origin": "https://api.example.invalid", "path": "/users/7" }
+  ]
+}
+```
+
+From this directory, the checked-in mixed example runs as follows:
+
+```sh
+# Select the API, detect removed /user/role, retain HAR entry 2 → 3: exit 1.
+node cli.mjs compare --baseline examples/fixtures/mixed-baseline.har \
+  --candidate examples/fixtures/mixed-candidate.har \
+  --config examples/fixtures/include-api.json \
+  --json out/mixed.json --html out/mixed.html
+
+# Unchanged selected API: exit 0, with explicit excluded-entry counts.
+node cli.mjs compare --baseline examples/fixtures/mixed-baseline.har \
+  --candidate examples/fixtures/mixed-baseline.har \
+  --config examples/fixtures/include-api.json
+
+# Negative control: omit --config; the HTML document is unsupported, exit 2.
+node cli.mjs compare --baseline examples/fixtures/mixed-baseline.har \
+  --candidate examples/fixtures/mixed-candidate.har
+```
+
+Selectors are an OR allowlist of 1–100 exact triples. Methods normalize to
+uppercase; origins must already be canonical HTTP(S) origins (no trailing slash,
+userinfo, query, fragment or explicit default port). Paths must be exact
+canonical URL pathnames, including any percent encoding. No glob, regex, prefix
+or origin merging is performed. All query variants and repeated occurrences
+of each selected triple remain analyzed, with ordinary matching rules.
+
+Every selector must match at least one entry across the captures or exit 2
+(`SELECTION_UNUSED`). There must be at least one selected baseline entry or
+exit 2 (`SELECTION_EMPTY`). A missing selected candidate is a removal (exit 1),
+not an empty successful comparison. Existing unused-ignore validation still
+applies: if removing every candidate also removes all paired JSON nodes for an
+ignore pointer, the command exits 2 (`IGNORE_UNUSED`) instead of 1. Both fail CI;
+exit 2 signals that ignore usage could not be verified, and no complete report
+is emitted. A candidate-only operation is informational
+when some selected baseline coverage exists; it has no before observation.
+
+Selection validates the HAR envelope and every entry's request identity, then
+validates responses/bodies **only for selected entries**. Excluded responses
+may be missing or unsupported; they are not health-checked. Selected JSON that
+becomes HTML, loses its captured body, or has malformed/unknown encoding still
+fails the whole scoped analysis. Selected HTTP failures remain findings; noise
+ignores cannot suppress status checks. File/entry/envelope limits cover the
+whole capture; body/node limits apply to selected responses.
+
+With selection, `summary.baselineEntries` and `candidateEntries` count selected
+entries, and the JSON includes additive `coverage` with `{totalEntries,
+selectedEntries, excludedEntries}` for baseline and candidate. HTML displays the
+same counts and an explicit scope warning. Evidence always uses original HAR
+indices. Only aggregate excluded counts are reported; excluded URLs, headers
+and bodies are omitted. Configured origin/path selectors can themselves be
+sensitive and are included in the report. Without selection, the original JSON
+and HTML example bytes are unchanged.
+
 ## HAR support and limits
 
 Input must contain `log.entries`; unused HAR metadata is not validated as a full
 HAR schema. Responses must have final status 200–599 and JSON content with an
 `application/json` or `application/*+json` MIME type. A missing JSON body,
 malformed JSON, unsupported MIME/encoding or capture error fails **the whole
-analysis**, including unmatched operations. HTML pages and binary asset captures
-need filtering/export support outside this demonstrator.
+analysis** for the selected scope, including unmatched selected operations.
+HTML pages and binary assets require explicit operation selection (below).
+Without selection, every entry is analyzed and unsupported bodies still fail.
 
 Bodies use `response.content.text`; absent/null `encoding` means plain text.
 Canonical padded `base64` is supported, decoded as strict UTF-8. Compressed or
@@ -203,8 +275,10 @@ no archive, CA state or `Engine::open` is used.
 | Each HAR / config file | 10 MiB / 64 KiB, regular files only |
 | Entries per HAR | 2,000 |
 | Decoded body | 1 MiB (base64 also bounded before decoding) |
-| Body depth / total JSON nodes per HAR | 64 / 100,000 |
+| Whole-document nesting / selected body depth | 128 / 64 |
+| Total JSON body nodes per HAR (selected entries) | 100,000 |
 | URL / method / JSON field name | 4,096 / 32 / 1,024 code units |
+| Operation selectors | 100 exact method/origin/path triples |
 | Ignore pointers | 100, each up to 1,024 code units |
 | Findings / serialized finding evidence | 10,000 / 4 MiB |
 
@@ -246,9 +320,22 @@ node --test test/*.test.mjs
 node examples/run-demo.mjs
 ```
 
+Optional DOM execution QA uses the desktop's existing locked `jsdom` development
+dependency (not required by the offline CLI). After root
+`npm ci --ignore-scripts`, run:
+
+```sh
+node tools/har-compare/examples/check-html-dom.mjs
+```
+
+This opens a synthetic hostile report in an isolated jsdom instance, enables
+script execution deliberately, intercepts all resource loading/fetch/window-open
+attempts without allowing network access, and checks that payloads remain text.
+It is not a real-browser, CSP-enforcement or perceptual screenshot test.
+
 The tests run actual subprocesses and temporary files: regression evidence,
 strict negative control, repeat pairing, query/origin boundaries, base64,
 malformed/missing bodies, Scope extensions, config typos, resource limits,
 privacy, deterministic report bytes, HTML escaping and non-overwriting outputs.
-See [decision and execution record](docs/decision-and-plan.md) and
+See [mixed HAR decision/plan](docs/mixed-har-plan.md), [decision and execution record](docs/decision-and-plan.md) and
 [verification/review record](docs/verification.md) for actual checks and limits.

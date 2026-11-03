@@ -217,3 +217,111 @@ test('review: HEAD representation size does not imply a missing response body', 
   const e = entry({}, { request: { method: 'HEAD', url: 'https://api.example.invalid/x' }, response: { status: 200, content: { size: 200, mimeType: 'application/json' } } });
   assert.equal(runCase(t, [e], [e]).status, 0);
 });
+
+const selectedApi = { method: 'GET', origin: 'https://api.example.invalid', path: '/users/7' };
+const selectedConfig = { includeOperations: [selectedApi] };
+const asset = () => entry({}, { request: { method: 'GET', url: 'https://static.example.invalid/private-ASSET_SECRET.png?token=QUERY_SECRET' }, response: { status: 200, content: { mimeType: 'image/png' } } });
+
+test('selection: mixed HAR excludes assets and retains original entry evidence', t => {
+  const r = runCase(t, [asset(), entry()], [asset(), entry({ user: { name: 'Synthetic Alice' } })], selectedConfig);
+  assert.equal(r.status, 1); assert.equal(r.data.findings[0].path, '/user/role');
+  assert.deepEqual(r.data.findings[0].evidence, { baselineEntry: 2, candidateEntry: 2 });
+  assert.deepEqual(r.data.coverage, {
+    baseline: { totalEntries: 2, selectedEntries: 1, excludedEntries: 1 },
+    candidate: { totalEntries: 2, selectedEntries: 1, excludedEntries: 1 },
+  });
+  assert.doesNotMatch(r.stdout, /ASSET_SECRET|QUERY_SECRET|static\.example/);
+});
+test('selection: unchanged chosen API produces an explicit scoped clean report', t => {
+  const r = runCase(t, [asset(), entry()], [asset(), asset(), entry()], selectedConfig, ['--html', '$DIR/report.html']);
+  assert.equal(r.status, 0); assert.equal(r.data.coverage.candidate.excludedEntries, 2);
+  const html = readFileSync(join(r.dir, 'report.html'), 'utf8');
+  assert.match(html, /Selection scope/); assert.match(html, /Excluded responses were not analyzed/);
+  assert.doesNotMatch(html, /ASSET_SECRET|QUERY_SECRET|static\.example/);
+  assert.equal(r.invoke().stdout, r.stdout);
+});
+test('selection: missing or HTML response on a selected endpoint fails closed', t => {
+  const missing = entry(); delete missing.response.content.text;
+  const html = entry({}, { response: { status: 500, content: { mimeType: 'text/html', text: '<h1>SERVER_SECRET</h1>' } } });
+  for (const item of [missing, html]) {
+    const r = runCase(t, [asset(), entry()], [asset(), item], selectedConfig);
+    assert.equal(r.status, 2); assert.equal(r.data.error.code, 'BODY');
+    assert.doesNotMatch(r.stdout, /SERVER_SECRET/);
+  }
+});
+test('selection: JSON ignore never hides selected HTTP failure', t => {
+  const item = entry({}, { response: { status: 500, content: { mimeType: 'application/json', text: '{}' } } });
+  const r = runCase(t, [asset(), entry()], [asset(), item], { ...selectedConfig, ignoreJsonPaths: ['/user'] });
+  assert.equal(r.status, 1); assert.ok(kinds(r).includes('http-failure'));
+});
+test('selection: missing candidate remains an observed removal, not empty success', t => {
+  const r = runCase(t, [asset(), entry()], [asset()], selectedConfig);
+  assert.equal(r.status, 1); assert.equal(r.data.findings[0].kind, 'operation-removed');
+  assert.equal(r.data.coverage.candidate.selectedEntries, 0);
+});
+test('selection: empty baseline or unmatched selector fails with no coverage claim', t => {
+  const noBaseline = runCase(t, [asset()], [asset(), entry()], selectedConfig);
+  assert.equal(noBaseline.status, 2); assert.equal(noBaseline.data.error.code, 'SELECTION_EMPTY');
+  const typo = runCase(t, [entry()], [entry()], { includeOperations: [{ ...selectedApi, path: '/typo' }] });
+  assert.equal(typo.status, 2); assert.equal(typo.data.error.code, 'SELECTION_UNUSED');
+  assert.equal(runCase(t, [entry()], [entry()], { includeOperations: [selectedApi, { ...selectedApi, path: '/typo' }] }).status, 2);
+});
+test('selection: all query variants and repeated occurrences participate', t => {
+  const a = entry(), b = entry();
+  a.request.url += '?token=VARIANT_A'; b.request.url += '?token=VARIANT_B';
+  const changed = structuredClone(b); changed.response.content.text = '{}';
+  const r = runCase(t, [asset(), a, b, a], [asset(), a, changed, a], selectedConfig);
+  assert.equal(r.status, 1); assert.equal(r.data.summary.pairedEntries, 3); assert.equal(r.data.summary.operations, 2);
+  assert.equal(r.data.findings[0].evidence.candidateEntry, 3); assert.doesNotMatch(r.stdout, /VARIANT_/);
+});
+test('selection: strict timestamp ignore retains its negative control', t => {
+  const a = [asset(), entry({ timestamp: 1 })], b = [asset(), entry({ timestamp: 2 })];
+  assert.equal(runCase(t, a, b, { ...selectedConfig, mode: 'strict', ignoreJsonPaths: ['/timestamp'] }).status, 0);
+  assert.equal(runCase(t, a, b, { ...selectedConfig, mode: 'strict' }).status, 1);
+});
+test('selection: method normalization and canonical selector ordering are deterministic', t => {
+  const post = entry({}, { request: { method: 'POST', url: 'https://api.example.invalid/users/7' } });
+  const postSelector = { ...selectedApi, method: 'post' };
+  const a = runCase(t, [entry(), post], [entry(), post], { includeOperations: [postSelector, selectedApi] });
+  const b = runCase(t, [entry(), post], [entry(), post], { includeOperations: [selectedApi, { ...postSelector, method: 'POST' }] });
+  assert.equal(a.status, 0); assert.equal(a.stdout, b.stdout);
+});
+for (const list of [null, [], [selectedApi, selectedApi], [{ ...selectedApi, method: '*' }], [{ ...selectedApi, method: 'GET\n' }], [{ ...selectedApi, origin: 'https://api.example.invalid/' }], [{ ...selectedApi, origin: 'https://user:password@api.example.invalid' }], [{ ...selectedApi, origin: 'file:///etc' }], [{ ...selectedApi, origin: 'https://api.example.invalid:443' }], [{ ...selectedApi, path: '/users/../users/7' }], [{ ...selectedApi, path: '/users/7?q=secret' }], [{ ...selectedApi, path: '/users/7#x' }], [{ ...selectedApi, path: '*' }], [{ ...selectedApi, typo: true }], Array.from({ length: 101 }, (_, i) => ({ ...selectedApi, path: '/x/' + i }))]) {
+  test('selection: invalid or misleading selectors are rejected: ' + JSON.stringify(list).slice(0, 140), t => {
+    assert.equal(runCase(t, [entry()], [entry()], { includeOperations: list }).status, 2);
+  });
+}
+test('selection: malformed request identity is not hidden by exclusion', t => {
+  const bad = asset(); bad.request.url = 'not a URL';
+  const r = runCase(t, [entry(), bad], [entry()], selectedConfig);
+  assert.equal(r.status, 2); assert.equal(r.data.error.code, 'HAR');
+});
+
+test('selection: literal double-slash path stays on its configured origin', t => {
+  const e = entry({}, { request: { method: 'GET', url: 'https://api.example.invalid//users/7' } });
+  const r = runCase(t, [e], [e], { includeOperations: [{ ...selectedApi, path: '//users/7' }] });
+  assert.equal(r.status, 0); assert.equal(r.data.operations[0].path, '//users/7');
+});
+test('HAR envelope nesting is bounded even in excluded response metadata', t => {
+  const r = runCase(t, [entry()], [entry()], selectedConfig);
+  const raw = JSON.parse(readFileSync(r.a)); let extra = 0;
+  for (let i = 0; i < 130; i++) extra = [extra];
+  raw.log.extra = extra;
+  writeFileSync(r.a, JSON.stringify(raw));
+  const result = r.invoke(); assert.equal(result.status, 2); assert.equal(JSON.parse(result.stdout).error.code, 'LIMIT');
+});
+
+test('envelope guard ignores bracket and escaped-quote text inside strings', t => {
+  const e = entry({ text: '['.repeat(200) + '\\"' + ']'.repeat(200) });
+  const r = runCase(t, [e], [e]); assert.equal(r.status, 0);
+});
+test('selection: excluded response availability is explicitly outside coverage', t => {
+  const e = asset(); delete e.response;
+  const r = runCase(t, [e, entry()], [entry()], selectedConfig);
+  assert.equal(r.status, 0); assert.equal(r.data.coverage.baseline.excludedEntries, 1);
+});
+
+test('selection: unused JSON ignore remains an error when all selected candidates disappear', t => {
+  const r = runCase(t, [asset(), entry({ timestamp: 1 })], [asset()], { ...selectedConfig, ignoreJsonPaths: ['/timestamp'] });
+  assert.equal(r.status, 2); assert.equal(r.data.error.code, 'IGNORE_UNUSED');
+});

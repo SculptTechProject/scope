@@ -16,8 +16,12 @@ const scenarios = [
   ['timestamp-ignored', 'timestamp.har', 'ignore-timestamp.json', 0, undefined],
   ['timestamp-strict', 'timestamp.har', 'strict.json', 1, 'value-changed'],
 ];
-for (const [name, candidate, config, expected, finding] of scenarios) {
-  const args = [join(root, 'cli.mjs'), 'compare', '--baseline', join(fixtures, 'baseline.har'), '--candidate', join(fixtures, candidate), '--json', join(out, name + '.json'), '--html', join(out, name + '.html')];
+scenarios.push(
+  ['mixed-selected', 'mixed-candidate.har', 'include-api.json', 1, 'field-removed', 'mixed-baseline.har'],
+  ['mixed-clean', 'mixed-baseline.har', 'include-api.json', 0, undefined, 'mixed-baseline.har'],
+);
+for (const [name, candidate, config, expected, finding, baseline = 'baseline.har'] of scenarios) {
+  const args = [join(root, 'cli.mjs'), 'compare', '--baseline', join(fixtures, baseline), '--candidate', join(fixtures, candidate), '--json', join(out, name + '.json'), '--html', join(out, name + '.html')];
   if (config) args.push('--config', join(fixtures, config));
   const run = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 10000 });
   assert.equal(run.status, expected, `${name}: ${run.stdout} ${run.stderr}`);
@@ -30,3 +34,9 @@ for (const [name, candidate, config, expected, finding] of scenarios) {
   console.log(`${name}: exit ${run.status}, ${report.summary.regressions} regression candidates`);
 }
 console.log(`Reports: ${resolve(out)}`);
+
+// Negative control: this mixed capture is unsupported without explicit selection.
+const unfiltered = spawnSync(process.execPath, [join(root, 'cli.mjs'), 'compare', '--baseline', join(fixtures, 'mixed-baseline.har'), '--candidate', join(fixtures, 'mixed-candidate.har')], { encoding: 'utf8', timeout: 10000 });
+assert.equal(unfiltered.status, 2);
+assert.equal(JSON.parse(unfiltered.stdout).error.code, 'BODY');
+console.log('mixed-unfiltered: exit 2, unsupported body analysis rejected');

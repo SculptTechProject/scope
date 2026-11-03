@@ -64,3 +64,41 @@ regression: 1, invalid HAR: 2. The upload staging block preserved those values;
 only successful analyses (0/1) generated report files. Artifact upload itself
 was not executed. The harness receipt is kept outside Git at
 `/var/lib/szpont/artifacts/scope-ci-experiment-20261103/workflow-local-verification.json`.
+
+## Continuation: mixed HAR selection (2026-11-03)
+
+Owner job 1567256549058154618. Feature plan:
+[mixed-har-plan.md](mixed-har-plan.md). This section supersedes earlier local
+frontend dependency and test-count limitations; browser/Rust limits remain.
+
+- `node --test tools/har-compare/test/*.test.mjs`: **75 passed, 0 failed**.
+  Initial selection tests failed before implementation. Later double-slash-path
+  and whole-envelope-depth tests were also observed RED, then passed after fixes.
+- `node tools/har-compare/examples/run-demo.mjs`: original exits 1/1/0/1 plus
+  mixed selected1, mixed clean0 and unfiltered mixed2. All six checked-in
+  JSON/HTML report pairs reproduce byte for byte; original four unchanged.
+- Fresh independent read-only reviewer ran the then-current 74-test suite,
+  eight extra adversarial cases and all report reproductions. No Critical or
+  Important findings, false-clean result or excluded-data leakage reproduced.
+  P3 documentation issue clarified: an unused JSON ignore can yield exit2 when
+  all selected candidates disappear. Added the interaction test; existing
+  fail-closed ignore policy is preserved. No findings deferred.
+- Root `npm ci --ignore-scripts --no-audit --no-fund` using the prepared Node
+  runtime and a task-local npm cache installed the existing locked dependencies;
+  no root dependency/lockfile was changed and no install scripts were run.
+- Root `npm run build`: **passed** (TypeScript and Vite).
+- Root `npm test -- --run`: **10 passed across 4 files**.
+- `node tools/har-compare/examples/check-html-dom.mjs`: **passed** using the
+  existing locked jsdom dependency. An isolated synthetic hostile report was
+  parsed with script execution enabled and resource/fetch/open interception:
+  zero executable/resource nodes, zero observed attempts, payload remained text,
+  no raw body secret or DOM execution error. This is DOM QA, not a real-browser
+  or CSP-enforcement test; no authenticated browser/profile was used.
+- Rust/cargo remain unavailable locally. Review does not establish desktop
+  capture behavior, complete secret removal, API schema compatibility or market
+  demand. The sample Actions workflow remains inactive and undispatched.
+
+At the start of this continuation all 8 existing GitHub checks at base
+`afb8e4ac7a998b128eaa1f63eabc64db53e9f421` had completed SUCCESS, including
+macOS/Windows/Linux checks and CodeQL. New-head status must be read back after
+push; the base result alone is not evidence that the continuation passed CI.

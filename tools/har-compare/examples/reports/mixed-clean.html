@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-MLH66xaYFHryhEd2oxx3aEIZVD9gNC3zRUusnIKoNlI='; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Scope HAR comparison</title><style>:root{font-family:system-ui,sans-serif;color:#182431;background:#eef2f6}body{max-width:1100px;margin:40px auto;padding:0 24px}h1{letter-spacing:-.04em}h2{margin-top:32px}p{line-height:1.6}.badge{display:inline-block;background:#dce8ee;padding:8px 14px;border-radius:8px}.regression{border-left:4px solid #b53248}.info{border-left:4px solid #27856d}article{background:white;border-radius:8px;padding:16px 20px;margin:12px 0;overflow-wrap:anywhere}code,pre{font-family:ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}small{color:#506174}details{background:white;padding:14px;border-radius:8px}summary{cursor:pointer}a{color:inherit}</style></head><body>
+<h1>Scope · HAR comparison</h1><p>Observed API changes · local CI experiment · report schema 1</p>
+<p class="badge">0 regression candidates · 0 informational changes · 1 paired responses</p>
+<p>Mode: <strong>shape</strong>. Ignored JSON nodes: 0.</p>
+<h2>Selection scope</h2><p>Baseline: 1 selected / 3 total; 2 excluded. Candidate: 1 selected / 3 total; 2 excluded.</p><p>Excluded responses were not analyzed. This result applies only to the configured method/origin/path selectors; it is not a health check of the entire capture.</p><h2>Findings</h2><article>No configured regression or informational changes were found.</article>
+<h2>How to read this report</h2><p>Fields describe captured observations, not required schema fields or proven incompatibility. Repeated requests pair by encounter order; reordered responses and request-body variants may be ambiguous. Origins and query values participate in matching; query values are omitted from labels. Different operations can therefore have identical labels. Entry numbers refer to the original HAR log.entries, starting at 1.</p>
+<p>Headers, cookies, body values, URL credentials, query values and fragments are excluded. Origin/path and JSON field names can still be sensitive: review this artifact before sharing. No traffic is replayed and no model or external asset is loaded.</p>
+<details><summary>Analysis JSON, configuration and evidence</summary><pre>{
+  &quot;schemaVersion&quot;: 1,
+  &quot;tool&quot;: &quot;scope-har-compare&quot;,
+  &quot;config&quot;: {
+    &quot;mode&quot;: &quot;shape&quot;,
+    &quot;ignoreJsonPaths&quot;: [],
+    &quot;includeOperations&quot;: [
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;origin&quot;: &quot;https://api.example.invalid&quot;,
+        &quot;path&quot;: &quot;/users/7&quot;
+      }
+    ]
+  },
+  &quot;summary&quot;: {
+    &quot;baselineEntries&quot;: 1,
+    &quot;candidateEntries&quot;: 1,
+    &quot;pairedEntries&quot;: 1,
+    &quot;operations&quot;: 1,
+    &quot;regressions&quot;: 0,
+    &quot;informational&quot;: 0,
+    &quot;ignoredNodes&quot;: 0
+  },
+  &quot;notices&quot;: [],
+  &quot;operations&quot;: [
+    {
+      &quot;id&quot;: &quot;operation-0001&quot;,
+      &quot;method&quot;: &quot;GET&quot;,
+      &quot;origin&quot;: &quot;https://api.example.invalid&quot;,
+      &quot;path&quot;: &quot;/users/7&quot;,
+      &quot;queryValuesOmitted&quot;: false,
+      &quot;baseline&quot;: [
+        {
+          &quot;entry&quot;: 2,
+          &quot;provenance&quot;: &quot;upstream&quot;,
+          &quot;edited&quot;: false
+        }
+      ],
+      &quot;candidate&quot;: [
+        {
+          &quot;entry&quot;: 2,
+          &quot;provenance&quot;: &quot;upstream&quot;,
+          &quot;edited&quot;: false
+        }
+      ]
+    }
+  ],
+  &quot;findings&quot;: [],
+  &quot;coverage&quot;: {
+    &quot;baseline&quot;: {
+      &quot;totalEntries&quot;: 3,
+      &quot;selectedEntries&quot;: 1,
+      &quot;excludedEntries&quot;: 2
+    },
+    &quot;candidate&quot;: {
+      &quot;totalEntries&quot;: 3,
+      &quot;selectedEntries&quot;: 1,
+      &quot;excludedEntries&quot;: 2
+    }
+  }
+}
+</pre></details>
+</body></html>
