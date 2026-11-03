@@ -170,3 +170,18 @@ Five black-box tests were observed RED→GREEN. A separate20-case /60-execution
 matrix passed plain/base64/cross comparisons, HEAD204 rejection, multiple BOMs,
 interior BOM data and exact/over-limit ASCII, multibyte and emoji byte boundaries.
 Fresh product suite after these corrections:178/178 passed.
+
+### Labels-only sharing mode
+
+Optional `compare --labels ids` projects the completed analysis through explicit
+metadata allowlists before stdout/JSON/HTML/JUnit rendering. Captured method,
+origin/path, pointer and original configuration labels are removed; evidence,
+counts, HTTP/type metadata and configured check results remain. Four process
+acceptance tests were observed RED→GREEN. Fresh product suite:182/182 passed;
+default/readable output and existing demos are unchanged.
+
+An independent12-case process corpus plus recursive unknown-field injection
+verified label/config sentinel exclusion across all formats, retained semantics,
+and no mutation of original analysis inputs. The fixed quality catalog killed
+20/20 selected behavioral mutants with green named controls, source hashes and
+no inconclusive outcomes. Label minimization is not anonymization.

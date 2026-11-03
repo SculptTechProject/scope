@@ -2,6 +2,7 @@
 import { parseArgs } from 'node:util';
 import { AnalysisError, fail, LIMITS, validateConfig } from './src/config.mjs';
 import { parseHar, readJsonFile } from './src/input.mjs';
+import { minimizeLabels } from './src/privacy.mjs';
 import { inspectHar } from './src/inspect.mjs';
 import { selectionCoverage } from './src/selection.mjs';
 import { applyContracts } from './src/contracts.mjs';
@@ -13,6 +14,7 @@ const help = `Scope HAR compare (offline prototype)
 Usage:
   node cli.mjs compare --baseline FILE --candidate FILE [--config FILE]
                       [--json NEW_FILE] [--html NEW_FILE] [--junit NEW_FILE]
+                      [--labels readable|ids]
   node cli.mjs inspect --input FILE [--json NEW_FILE]
   node cli.mjs doctor
   node cli.mjs --help
@@ -28,7 +30,7 @@ try {
   if (Number(process.versions.node.split('.')[0]) < 22) fail('RUNTIME', 'Node 22 or later is required; tested with 22.22.3.');
   let parsed;
   try {
-    parsed = parseArgs({ options: { help: { type: 'boolean', short: 'h' }, baseline: { type: 'string' }, candidate: { type: 'string' }, input: { type: 'string' }, config: { type: 'string' }, json: { type: 'string' }, html: { type: 'string' }, junit: { type: 'string' } }, allowPositionals: true, tokens: true });
+    parsed = parseArgs({ options: { help: { type: 'boolean', short: 'h' }, baseline: { type: 'string' }, candidate: { type: 'string' }, input: { type: 'string' }, config: { type: 'string' }, json: { type: 'string' }, html: { type: 'string' }, junit: { type: 'string' }, labels: { type: 'string' } }, allowPositionals: true, tokens: true });
   } catch { fail('ARGUMENT', 'Invalid arguments. Run --help for usage.'); }
   const { values, positionals, tokens } = parsed;
   if (tokens.filter(t => t.kind === 'option').some((t, i, all) => all.findIndex(x => x.name === t.name) !== i)) fail('ARGUMENT', 'Duplicate flags are not allowed.');
@@ -42,6 +44,7 @@ try {
     await writeReports(values.json ? [[values.json, json]] : []);
     process.stdout.write(json);
   } else {
+    if (values.labels !== undefined && !['readable', 'ids'].includes(values.labels)) fail('ARGUMENT', '--labels must be readable or ids.');
     if (values.input) fail('ARGUMENT', '--input is only available with inspect.');
     if (positionals.length !== 1 || positionals[0] !== 'compare' || !values.baseline || !values.candidate) fail('ARGUMENT', 'compare requires --baseline and --candidate. Run --help for usage.');
     const config = validateConfig(values.config ? await readJsonFile(values.config, LIMITS.configBytes, 'Config') : {});
@@ -51,6 +54,7 @@ try {
     let report = compareHar(baseline.entries, candidate.entries, config);
     report = applyContracts(report, baseline.entries, candidate.entries, config);
     if (coverage) report.coverage = coverage;
+    if (values.labels === 'ids') report = minimizeLabels(report);
     const json = jsonReport(report);
     await writeReports([...(values.json ? [[values.json, json]] : []), ...(values.html ? [[values.html, htmlReport(report)]] : []), ...(values.junit ? [[values.junit, junitReport(report)]] : [])]);
     process.stdout.write(json);

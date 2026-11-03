@@ -31,7 +31,7 @@ export function junitReport(report) {
   if (report.findings.length === 0) append('    <testcase classname="scope-har-compare" name="clean-analysis"/>\n');
   for (const finding of report.findings) {
     const operation = operations.get(finding.operation);
-    const label = operation ? [operation.method, `${operation.origin ?? ''}${operation.path ?? ''}`].filter(Boolean).join(' ') : finding.operation ?? 'scope-har-compare';
+    const label = operation ? ([operation.method, `${operation.origin ?? ''}${operation.path ?? ''}`].filter(Boolean).join(' ') || operation.id) : finding.operation ?? 'scope-har-compare';
     const name = `${finding.id}: ${finding.kind}${label ? ` · ${label}` : ''}`;
     const details = evidence(finding);
     append(`    <testcase classname="scope-har-compare" name="${escape(name)}">\n`);

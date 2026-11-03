@@ -134,6 +134,8 @@ Evidence entry numbers are 1-based indices in each original `log.entries` array.
   specified method/origin/path, with isolated usage validation.
 - [`--junit NEW_FILE`](formats/README.md): deterministic JUnit XML alongside
   JSON/HTML, with findings/evidence and safe XML escaping.
+- [`--labels ids`](docs/privacy-labels.md): omit captured labels and original config
+  strings across every report format while retaining counts/types/status/evidence.
 - [Isolated local test lab](lab/README.md): separately locked development tools,
   real synthetic localhost HTTP capture, detector controls and offline analysis.
 - [Two-hour sprint decisions](docs/sprint-plan.md): scope and evidence plan.
