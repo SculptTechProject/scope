@@ -30,8 +30,8 @@ prefix. The script never downloads missing tools or dependencies:
 
 ```sh
 python3 tools/har-compare/toolchains/doctor.py --verify \
-  --node /opt/szpont/toolchains/node-v22.22.3-linux-x64/bin/node \
-  --artifact-prefix /var/lib/szpont/artifacts/scope-ci-sprint-20261103/toolchains
+  --node /opt/scope-lab/toolchains/node-v22.22.3-linux-x64/bin/node \
+  --artifact-prefix /opt/scope-lab/toolchains
 ```
 
 This checks exact Rust/Cargo versions against `rust-toolchain.toml`, checks
@@ -131,16 +131,16 @@ create a disposable parent for new build and capture artifacts:
 SCOPE_NATIVE_PARENT="$(mktemp -d)"
 python3 -B tools/har-compare/toolchains/build_native_capture.py \
   --work-dir "$SCOPE_NATIVE_PARENT/build" \
-  --artifact-prefix /var/lib/szpont/artifacts/scope-ci-sprint-20261103/toolchains \
-  --node /opt/szpont/toolchains/node-v22.22.3-linux-x64/bin/node
+  --artifact-prefix /opt/scope-lab/toolchains \
+  --node /opt/scope-lab/toolchains/node-v22.22.3-linux-x64/bin/node
 
 python3 -B tools/har-compare/toolchains/native_capture.py \
   --binary "$SCOPE_NATIVE_PARENT/build/target/debug/native_capture" \
-  --node /opt/szpont/toolchains/node-v22.22.3-linux-x64/bin/node \
+  --node /opt/scope-lab/toolchains/node-v22.22.3-linux-x64/bin/node \
   --output-parent "$SCOPE_NATIVE_PARENT"
 ```
 
-The absolute prefix/Node examples identify this sprint's prepared tools; change
+The absolute prefix/Node examples identify an optional local tool directory; change
 them explicitly on another host. The scripts locate this checkout from their
 own location. They do not change global `PATH`, `HOME`, auth, system trust or
 root dependency files. The build directory must be new and outside the checkout.

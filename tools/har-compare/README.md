@@ -36,10 +36,10 @@ mixed-clean: exit 0, 0 regression candidates
 mixed-unfiltered: exit 2, unsupported body analysis rejected
 ```
 
-For the prepared VPS runtime, prefix these commands with:
+For a separately installed runtime, select its bin directory, for example:
 
 ```sh
-export PATH=/opt/szpont/toolchains/node-v22.22.3-linux-x64/bin:$PATH
+export PATH=/opt/scope-lab/toolchains/node-v22.22.3-linux-x64/bin:$PATH
 ```
 
 All CLI paths resolve from the caller's working directory; an absolute path to
@@ -138,7 +138,7 @@ Evidence entry numbers are 1-based indices in each original `log.entries` array.
   strings across every report format while retaining counts/types/status/evidence.
 - [Isolated local test lab](lab/README.md): separately locked development tools,
   real synthetic localhost HTTP capture, detector controls and offline analysis.
-- [Two-hour sprint decisions](docs/sprint-plan.md): scope and evidence plan.
+- [Design and support boundaries](docs/design.md): matching, failure and sharing semantics.
 
 The CLI remains dependency-free; lab/browser tooling is optional and separate.
 Authored `contracts` are user requirements, not a schema inferred from traffic.
@@ -344,15 +344,18 @@ pointers appear in the report too. Review derived reports before sharing or
 uploading; keep real HAR files outside Git and use restricted CI artifacts.
 The fixtures and checked-in reports here contain synthetic `.invalid` traffic.
 
-## GitHub Actions example
+## GitHub Actions
 
-[examples/github-actions.yml](examples/github-actions.yml) is inactive and uses
+The [isolated HAR test job](docs/ci.md) runs the product, demos, DOM and
+sandboxed browser checks using only locked lab dependencies and synthetic data.
+See [verification](docs/verification.md) for observed results and remaining gates.
+
+The reusable [examples/github-actions.yml](examples/github-actions.yml) is inactive and uses
 synthetic timestamp fixtures. It preserves the comparison's 0/1/2 status after
 uploading only derived reports, with read-only repository permissions, pinned
 action commits and short artifact retention. No HAR or credential is uploaded.
 Copy it into `.github/workflows/` only when you choose to enable it and replace
-the fixture inputs with safely obtained captures. This task does not install or
-dispatch the workflow. A local successful demo is not a remotely executed CI run.
+the fixture inputs with safely obtained captures. A local successful demo is not a remotely executed CI run.
 
 ## Development and validation
 
@@ -361,9 +364,9 @@ npm test
 node examples/run-demo.mjs
 ```
 
-Optional DOM execution QA uses the desktop's existing locked `jsdom` development
-dependency (not required by the offline CLI). After root
-`npm ci --ignore-scripts`, run:
+Optional DOM execution QA uses the lab's isolated locked `jsdom` development
+dependency (not required by the offline CLI). From the repository root, run
+`npm ci --prefix tools/har-compare/lab --ignore-scripts`, then:
 
 ```sh
 node tools/har-compare/examples/check-html-dom.mjs
@@ -378,5 +381,5 @@ The tests run actual subprocesses and temporary files: regression evidence,
 strict negative control, repeat pairing, query/origin boundaries, base64,
 malformed/missing bodies, Scope extensions, config typos, resource limits,
 privacy, deterministic report bytes, HTML escaping and non-overwriting outputs.
-See [mixed HAR decision/plan](docs/mixed-har-plan.md), [decision and execution record](docs/decision-and-plan.md) and
-[verification/review record](docs/verification.md) for actual checks and limits.
+See [design and support boundaries](docs/design.md) and the
+[verification record](docs/verification.md) for reproducible checks and limits.

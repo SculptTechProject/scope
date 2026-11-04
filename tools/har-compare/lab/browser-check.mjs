@@ -79,11 +79,35 @@ export async function runBrowserChecks(browser, output) {
     const background = await report.page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor);
     const rootBackground = await report.page.locator('html').evaluate(element => getComputedStyle(element).backgroundColor);
     assert.ok([background, rootBackground].includes('rgb(247, 250, 252)'), 'the exact hash-authorized report CSS must render');
+    // Escaping removes executable nodes; independently exercise the report's CSP.
+    const csp = await report.page.evaluate(async () => {
+      globalThis.scopeCspProbeExecuted = false;
+      const violations = [];
+      const observe = event => violations.push(event.effectiveDirective);
+      document.addEventListener('securitypolicyviolation', observe);
+      const script = document.createElement('script');
+      script.textContent = 'globalThis.scopeCspProbeExecuted = true';
+      const style = document.createElement('style');
+      style.textContent = '#scope-csp-probe { color: rgb(255, 0, 1) !important; }';
+      const probe = document.createElement('span');
+      probe.id = 'scope-csp-probe';
+      document.body.append(script, style, probe);
+      // Policy violation events are queued after rejected resource processing.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const result = { scriptExecuted: globalThis.scopeCspProbeExecuted, color: getComputedStyle(probe).color, violations };
+      script.remove(); style.remove(); probe.remove();
+      document.removeEventListener('securitypolicyviolation', observe);
+      return result;
+    });
+    assert.equal(csp.scriptExecuted, false, 'CSP must block an injected inline script');
+    assert.notEqual(csp.color, 'rgb(255, 0, 1)', 'CSP must block unhashed inline CSS');
+    assert.ok(csp.violations.some(value => value.startsWith('script-src')), 'script policy enforcement must be observed');
+    assert.ok(csp.violations.some(value => value.startsWith('style-src')), 'style policy enforcement must be observed');
     await report.page.screenshot({ path: join(output, 'hostile-report.png'), fullPage: true });
     await report.page.locator('details summary').click();
     assert.equal(await report.page.locator('details').getAttribute('open'), '');
     await report.page.screenshot({ path: join(output, 'hostile-report-expanded.png'), fullPage: true });
-    return { status: 'passed', browserVersion: browser.version(), scriptExecution: false, attemptedNetworkRequests: 0, localLinks, detectorPositiveControl: { scriptExecution: true, attemptedNetworkDetected: true }, screenshots: ['hostile-report.png', 'hostile-report-expanded.png'] };
+    return { status: 'passed', browserVersion: browser.version(), scriptExecution: false, attemptedNetworkRequests: 0, localLinks, detectorPositiveControl: { scriptExecution: true, attemptedNetworkDetected: true }, csp: { inlineScriptBlocked: true, unhashedStyleBlocked: true, authorizedStyleRendered: true }, screenshots: ['hostile-report.png', 'hostile-report-expanded.png'] };
   } finally { await report.context.close(); }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

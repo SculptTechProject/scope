@@ -1,6 +1,7 @@
-// Optional development QA using the desktop's existing locked jsdom dependency.
+// Development QA using the lab's isolated, locked jsdom dependency.
 // This is a DOM execution check, not a real-browser/CSP certification.
-import { JSDOM, ResourceLoader, VirtualConsole } from 'jsdom';
+import { createRequire } from 'node:module';
+const { JSDOM, ResourceLoader, VirtualConsole } = createRequire(new URL('../lab/package.json', import.meta.url))('jsdom');
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
