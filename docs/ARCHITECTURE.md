@@ -38,7 +38,7 @@ The proxy binds loopback by default (`127.0.0.1:17890`). HTTPS uses a Scope-gene
 
 Each exchange has a stable ID and belongs to a saved session. Repeated headers are arrays, and non-UTF-8 bodies use base64. The SQLite database uses WAL mode. Session revisions change when an existing exchange completes or is edited, allowing the UI to refresh a row even when the exchange count stays constant.
 
-Bodies are buffered with an explicit **16 MiB per-body limit**. Oversized bodies fail instead of appearing as successful complete captures. This simplifies editing and durable snapshots, at the cost of memory usage and streaming support. Analysis/import/export currently load session records into memory.
+Bodies are buffered with an explicit **16 MiB per-body limit**. Oversized bodies fail instead of appearing as successful complete captures. This simplifies editing and durable snapshots, at the cost of memory usage and streaming support. Analysis/import/export currently load session records into memory. Native import consumes its owned exchange values without a second full-tree clone; see the [bounded import memory measurements](NATIVE_IMPORT_MEMORY.md).
 
 Request and response breakpoints hold the corresponding transfer until continued, aborted, timed out or shut down. The timeout is 60 seconds. Edited messages retain original snapshots in the local archive. Replay sends a separate request and records a separate exchange.
 
