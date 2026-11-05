@@ -1,13 +1,34 @@
-# Scope v0.1.0-alpha.1 status
+# Scope 1.2.0 release candidate
 
-Application version: `0.1.0`. First GitHub prerelease targets macOS arm64. See [Releases](https://github.com/SculptTechProject/scope/releases) for the published assets, checksums and release notes.
+Application version: `1.2.0`. This source branch prepares the reusable offline
+HAR comparison Action, refreshed identity and desktop icons, and dependency
+updates. A version in source does not establish a published release; see
+[Releases](https://github.com/dalkedev/scope/releases) for downloads and their
+exact platform manifests/checksums.
 
-Implemented: Rust HTTP(S) interception and SQLite archive; native Tauri inspector; request/response editing and replay; HAR/native import/export; observed-traffic analysis/comparison; Android package selection and proxy/Frida integration; seven scoped MCP tools.
+Scope includes persistent HTTP(S) capture, request/response rules, editing and
+replay, structured traffic filters, HAR/native archives, observed-traffic
+analysis, Android proxy/Frida integration and twelve scoped MCP tools. The
+separate HAR CLI and composite Action compare local captures; authored contracts
+provide explicit status/JSON requirements.
 
-The local validation baseline includes 16 passing Rust tests, a TypeScript production build, a native macOS package, real-process MCP checks, native HAR export/import and response editing, and proxy/Frida capture from the included test APK on one rooted Android emulator. [Recorded verification](docs/VERIFICATION.md) distinguishes these checks from unsupported combinations. Check [dependency review](docs/DEPENDENCIES.md) for tracked upstream advisories and maintenance warnings.
+[Recorded verification](docs/VERIFICATION.md) separates local candidate checks,
+exact-commit hosted CI and historical macOS/Android interaction. Fresh combined
+CI, draft asset verification and interactive desktop/device checks are separate
+release steps. Windows/Linux interactive behavior remains experimental; Intel
+macOS is unverified. The macOS package is ad-hoc signed, without Apple notarization.
 
-The public app omits optional Frida native worker/server binaries. Install the runtime locally for Frida mode; integration source and hook profiles remain included. [Android setup](docs/ANDROID.md)
+Public packages exclude optional native Frida worker/server binaries. Users may
+install the optional runtime separately; source integration, setup helpers and
+hook profiles remain included. [Android setup](docs/ANDROID.md)
 
-Windows/Linux workflows are included, but device/runtime parity is not claimed. WebSocket frames, HTTP3, unbounded/streaming bodies and long-session stability remain outside this alpha's verified coverage. The macOS package is not Apple-notarized.
+Bodies remain buffered up to 16 MiB each. WebSocket frames, trailers, HTTP/3,
+large-session streaming and long-duration stability are outside verified coverage.
+The HAR Action initially targets Linux runners with caller-supplied Node 22.22.3+
+and Bash; its results do not validate desktop or device behavior. Derived report
+labels and traffic patterns need review before sharing. Existing upstream
+dependency findings remain in [DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
-Development: `npm ci` then `npm run desktop`. Packaging: `npm run package`. [Contributing](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) · [Release process](docs/RELEASING.md)
+Development: `npm ci` then `npm run desktop`. Packaging: `npm run package`.
+[Contributing](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) ·
+[Release process](docs/RELEASING.md)

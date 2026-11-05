@@ -24,13 +24,13 @@ jobs:
   compare:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.22.3'
-      - uses: dalkedev/scope/.github/actions/har-compare@szpont/har-compare-action
+      - uses: dalkedev/scope/.github/actions/har-compare@v1.2.0
         id: compare
         with:
           baseline: private-captures/baseline.har
@@ -39,9 +39,10 @@ jobs:
           output: scope-reports
 ```
 
-The feature branch above contains the Action for review. **Pin an inspected full
-commit SHA before using it with sensitive captures.** Scope v1.1.0 predates the
-Action; do not use that tag as its ref. Captures in the snippet must already exist
+The example targets the planned `v1.2.0` release tag; it becomes usable after
+that tag is published. **Pin an inspected full commit SHA before using it with
+sensitive captures.** Scope v1.1.0 predates the Action; do not use that tag as its
+ref. Captures in the snippet must already exist
 on your runner, from your own approved capture step or private storage. Do not
 commit real captures merely to use this example. On a self-hosted runner, choose a
 fresh output directory for every invocation and manage local retention yourself.
@@ -121,7 +122,7 @@ either result into a clean comparison. The complete synthetic workflow shows an
 explicit upload toggle and a final gate which also rejects missing outputs:
 
 ```yaml
-- uses: dalkedev/scope/.github/actions/har-compare@szpont/har-compare-action
+- uses: dalkedev/scope/.github/actions/har-compare@v1.2.0
   id: compare
   with:
     baseline: private-captures/baseline.har

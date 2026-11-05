@@ -4,6 +4,18 @@ User-visible changes are recorded here. Back up important captures before upgrad
 
 ## Unreleased
 
+## 1.2.0 — release candidate
+
+- Reusable offline HAR comparison composite Action with JSON, HTML and JUnit
+  outputs, minimized labels by default and explicit clean/regression/invalid
+  results. Deferred gating lets callers inspect reports before enforcing the
+  result; uploads remain an explicit caller choice.
+- New Scope logo, repository banner and desktop icon assets. Existing real
+  application screenshots and desktop interaction colors are retained.
+- Updated pinned GitHub Actions, Lucide icons and TypeScript. Redistributed
+  dependency notices now match the committed locks and include Lucide's
+  Feather-derived MIT notice.
+
 ## 1.1.0 — 2026-11-05
 
 - Structured desktop traffic search with combined method, host, status, body,

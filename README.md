@@ -24,7 +24,7 @@ Scope routes traffic through a Rust engine, gives you control over requests and 
 
 **Local capture, saved sessions and export need no account or subscription.** Built-in analysis runs locally. You choose which sessions an external agent can access.
 
-> **This README describes Scope 1.1.0.** Check [Releases](https://github.com/dalkedev/scope/releases) for published builds and platform notes. Earlier alpha downloads do not include all the features below. [Verification record →](docs/VERIFICATION.md) The refreshed artwork and desktop icons are prepared for a future build; published 1.1.0 binaries retain their original icon.
+> **This README describes the Scope 1.2.0 release candidate.** Check [Releases](https://github.com/dalkedev/scope/releases) for published builds and platform notes. Earlier alpha downloads do not include all the features below. [Verification record →](docs/VERIFICATION.md) The refreshed artwork and desktop icons are included in this candidate; published 1.1.0 binaries retain their original icon.
 
 <a href="docs/SCREENSHOTS.md"><img src="docs/images/traffic-inspector.jpg" alt="Real captured traffic: a products request returns a local HTTP 503 mock, with its rule and response JSON visible." width="100%"></a>
 
@@ -74,6 +74,12 @@ an API contract: an unchanged HTTP 500 needs an explicit status assertion to fai
 Reports minimize captured data; inspect them before sharing.
 [CLI, examples and privacy limits →](tools/har-compare/README.md)
 
+The [reusable GitHub Action](.github/actions/har-compare/README.md) wraps the same
+offline CLI for Linux runners. It exposes reports and separate `0`/`1`/`2`
+results, defaults to minimized labels and lets the caller defer its final gate.
+It never uploads captures or reports automatically. Supply Node 22.22.3+ and Bash;
+review reports before choosing to share them.
+
 ### Build from source
 
 Install Rust, Node.js **22.13+** and [Tauri's native prerequisites](https://v2.tauri.app/start/prerequisites/). The repository pins the Rust compiler and dependency lockfiles.
@@ -116,7 +122,7 @@ The same engine powers the native inspector and MCP. Real HTTP/TLS fixtures test
 
 | Today                   | Boundary                                                                                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| macOS arm64             | Local UI/package evidence is recorded by version; the 1.1.0 interactive check remains open. Ad-hoc signed; not Apple-notarized.                                          |
+| macOS arm64             | Local UI/package evidence is recorded by version; the 1.2.0 interactive check remains open. Ad-hoc signed; not Apple-notarized.                                          |
 | Windows x64 / Linux x64 | CI builds, packages and headless MCP/capture smoke pass. Interactive UI and device validation remain open. Intel macOS is unverified.                                     |
 | Android / Frida         | Earlier smoke covered one rooted Android 16 arm64 emulator. The 1.0 diagnostics changes use fixtures; arbitrary apps and TLS stacks are unverified.                       |
 | Capture                 | Bodies are buffered up to **16 MiB each**. Streaming, WebSocket frames, trailers and HTTP3 are not implemented.                                                           |
