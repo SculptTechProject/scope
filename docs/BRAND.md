@@ -45,9 +45,9 @@ their separate [capture provenance](images/README.md) remain unchanged.
 
 The original Scope artwork is distributed under **AGPL-3.0-or-later**, like the
 project: see [LICENSE](../LICENSE). Existing third-party licenses and notices
-remain intact. This is a visual update, not a feature, certification or release.
-Published 1.1.0 downloads retain their original icon until a new application build
-is separately packaged, verified and released.
+remain intact. The new desktop icons are included in the 1.2.0 release candidate.
+Published 1.1.0 downloads retain their original icon. Packaging, platform
+verification and publication are tracked separately in [the verification record](VERIFICATION.md).
 
 Use concrete verbs and evidence: capture, rewrite, replay, save, inspect. Keep
 scope, privacy and synthetic provenance visible. Avoid unsupported claims such

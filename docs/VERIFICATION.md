@@ -1,5 +1,37 @@
 # Recorded verification
 
+## 1.2.0 release preparation — 2026-11-05
+
+Local checks on the combined `release/1.2.0` candidate used macOS arm64,
+Node 22.22.3 and Rust 1.99.1. Original heads from #3, #15, #22 and #23 are
+preserved as merge parents. Application/npm/Cargo/Tauri versions agree on 1.2.0;
+the private HAR tool/lab packages retain separate 0.1.0 identifiers.
+
+- Rust formatting and all 70 workspace tests passed: 40 core, 23 device,
+  five desktop and two MCP. Fixtures exercise real local HTTP/TLS and fake ADB;
+  these tests do not establish a newly validated device/desktop interaction.
+- TypeScript/Vite production build and all 15 frontend interaction tests passed.
+- All 202 HAR tests, including composite entrypoint tests, passed locally.
+  These launch the real bundled CLI in synthetic consumer subprocesses.
+- Three Node release/tag/resource tests and three Python installer tests passed.
+  npm audit reported zero vulnerabilities, including development dependencies.
+- Gitleaks 8.30.1 found no leaks in a clean snapshot of the candidate's tracked
+  source, excluding installed dependencies and build products.
+- Dependency notices regenerated as 226 Rust sections and seven npm runtime
+  packages. Both committed-lock hashes, all local Rust package versions and the
+  exact installed Lucide 0.577.0 license were checked; the JSON/HTML include its
+  Feather-derived MIT text.
+
+Fresh exact-head hosted platform, HAR/browser and composite-Action workflow
+results remain separate release gates. Prior dependency PRs passed three-platform
+build/package/engine-MCP checks; this does not establish the combined candidate.
+No 1.2.0 native package, interactive desktop/device run, draft assets or publication
+was verified by the local checks above. macOS ad-hoc signing is not Apple
+notarization; Windows/Linux interactive behavior remains experimental and Intel
+macOS is unverified. Existing dependency findings remain in
+[DEPENDENCIES.md](DEPENDENCIES.md). Historical results below keep their original
+version boundaries.
+
 ## 1.0.0 release preparation — 2026-11-02
 
 These checks were recorded on `release/1.0.0` before publication, with source and
