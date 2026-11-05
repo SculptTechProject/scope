@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/scope-header.svg" alt="Scope — HTTP, in plain sight. Capture, rewrite and keep the evidence." width="100%">
+  <img src="assets/brand/scope-banner.png" alt="Scope — See what your app is saying. HTTP(S) debugging: capture, inspect and compare." width="100%">
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@ Scope routes traffic through a Rust engine, gives you control over requests and 
 
 **Local capture, saved sessions and export need no account or subscription.** Built-in analysis runs locally. You choose which sessions an external agent can access.
 
-> **This README describes Scope 1.1.0.** Check [Releases](https://github.com/dalkedev/scope/releases) for published builds and platform notes. Earlier alpha downloads do not include all the features below. [Verification record →](docs/VERIFICATION.md)
+> **This README describes Scope 1.1.0.** Check [Releases](https://github.com/dalkedev/scope/releases) for published builds and platform notes. Earlier alpha downloads do not include all the features below. [Verification record →](docs/VERIFICATION.md) The refreshed artwork and desktop icons are prepared for a future build; published 1.1.0 binaries retain their original icon.
 
 <a href="docs/SCREENSHOTS.md"><img src="docs/images/traffic-inspector.jpg" alt="Real captured traffic: a products request returns a local HTTP 503 mock, with its rule and response JSON visible." width="100%"></a>
 
@@ -135,6 +135,10 @@ Every change goes through maintainer review and required platform checks. [Owner
 
 ---
 
+<p align="center">
+  <a href="docs/BRAND.md"><img src="assets/brand/scope-logo.svg" alt="Scope logo and brand assets" width="48" height="48"></a>
+</p>
+
 An independent project by **[dalkedev](https://github.com/dalkedev)**. Scope includes attributed HTTP Toolkit interception scripts and Frida integration; their original licenses and notices remain intact. HTTP Toolkit does not need to be installed.
 
-**AGPL-3.0-or-later** · [License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md)
+**AGPL-3.0-or-later** · [License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md) · [Brand assets](docs/BRAND.md)
