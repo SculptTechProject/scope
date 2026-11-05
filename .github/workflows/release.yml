@@ -11,7 +11,7 @@ on:
       tag:
         description: Existing version tag to build
         required: true
-        default: v1.0.0
+        default: v1.1.0
 permissions:
   contents: read
 concurrency:
@@ -30,6 +30,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       PROPOSAL_BRANCH: ${{ github.ref_name }}
+      RELEASE_TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -37,12 +38,16 @@ jobs:
       - name: Open draft pull request as the Actions bot
         shell: bash
         run: |
-          test "$PROPOSAL_BRANCH" = 'release/1.0.0' || { echo 'Proposal requires release/1.0.0'; exit 1; }
+          node -e "if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(process.env.RELEASE_TAG)) process.exit(1)"
+          version=${RELEASE_TAG#v}
+          test "$PROPOSAL_BRANCH" = "release/$version" || { echo 'Proposal branch must match the requested version'; exit 1; }
+          review_file="docs/releases/$version-review.md"
+          test -f "$review_file" || { echo 'Missing committed release review'; exit 1; }
           existing=$(gh pr list --head "$PROPOSAL_BRANCH" --base main --state open --json number --jq '.[0].number // empty')
           if test -n "$existing"; then
             echo "Review proposal already exists: #$existing"
           else
-            gh pr create --draft --base main --head "$PROPOSAL_BRANCH" --title 'Scope 1.0.0: traffic rules, replay, diagnostics and MCP' --body-file docs/releases/1.0.0-review.md
+            gh pr create --draft --base main --head "$PROPOSAL_BRANCH" --title "Scope $version: maintainer release review" --body-file "$review_file"
           fi
   build:
     if: inputs.mode != 'proposal'

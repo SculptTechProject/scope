@@ -4,9 +4,9 @@ Scope stores captures locally and works without an account. Start with the inclu
 
 ## Install a release
 
-1. Download the artifact for your host from [GitHub Releases](https://github.com/SculptTechProject/scope/releases). Read its release notes for architecture, optional Frida resources and signing status.
+1. Download the artifact for your host from [GitHub Releases](https://github.com/dalkedev/scope/releases). Read its release notes for architecture, optional Frida resources and signing status.
 2. Compare its SHA-256 with the release checksum file, then extract the archive or run the platform installer.
-3. On macOS, move `Scope.app` to Applications and open it. The 1.0.0 package is ad-hoc signed without Apple notarization. If Gatekeeper blocks it, use macOS **System Settings → Privacy & Security → Open Anyway** after verifying the source and checksum. Do not disable Gatekeeper globally.
+3. On macOS, move `Scope.app` to Applications and open it. The public package is ad-hoc signed without Apple notarization. If Gatekeeper blocks it, use macOS **System Settings → Privacy & Security → Open Anyway** after verifying the source and checksum. Do not disable Gatekeeper globally.
 
 The interactively tested host is **macOS arm64** (Apple Silicon). Windows x64 and Linux x64 have CI build/headless-protocol coverage; their interactive installers, desktop and device behavior remain unverified. Read the release notes for Linux's known dependency advisory. Optional Frida native binaries are not included in public packages; [install them locally](ANDROID.md#frida-runtime) for Frida mode.
 
@@ -113,4 +113,4 @@ The connection/settings view displays the data directory. It contains `scope.sql
 
 If cleanup fails, keep the recovery file and reconnect the same device. Removing the recovery file does not restore the device. See [recovery details](ANDROID.md#cleanup-and-recovery).
 
-For a reproducible bug report, use the repository's [issue forms](https://github.com/SculptTechProject/scope/issues/new/choose). Include sanitized logs and the exact stage that failed, not private captures or CA keys.
+For a reproducible bug report, use the repository's [issue forms](https://github.com/dalkedev/scope/issues/new/choose). Include sanitized logs and the exact stage that failed, not private captures or CA keys.

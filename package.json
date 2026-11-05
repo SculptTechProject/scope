@@ -1,16 +1,16 @@
 {
   "name": "scope-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Desktop HTTP(S) debugging with persistent sessions, Android instrumentation and MCP",
   "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SculptTechProject/scope.git"
+    "url": "https://github.com/dalkedev/scope.git"
   },
   "bugs": {
-    "url": "https://github.com/SculptTechProject/scope/issues"
+    "url": "https://github.com/dalkedev/scope/issues"
   },
-  "homepage": "https://github.com/SculptTechProject/scope#readme",
+  "homepage": "https://github.com/dalkedev/scope#readme",
   "engines": {
     "node": ">=22.13.0"
   },

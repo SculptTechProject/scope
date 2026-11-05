@@ -1,6 +1,6 @@
 # Maintainer review and releases
 
-Scope is maintained by [SculptTechProject](https://github.com/SculptTechProject).
+Scope is maintained by [dalkedev](https://github.com/dalkedev).
 Every source change goes through a pull request. The default branch requires
 one approving review, dismisses stale approvals after new commits, requires
 resolved review conversations and successful checks on macOS, Windows and Linux.
@@ -9,11 +9,15 @@ disabled. `.github/CODEOWNERS` assigns the maintainer to every path.
 
 ## Reviewing a release proposal
 
-The `release/1.0.0` branch contains the proposed 1.0.0 implementation. Dispatch
-**Prepare review or draft release** on that branch with `mode: proposal` to open
+Use a `release/<version>` branch, such as `release/1.1.0`. Dispatch
+**Prepare review or draft release** on that branch with `mode: proposal` and
+the matching `tag: v<version>` to open
 a draft PR authored by `github-actions[bot]`. The workflow only opens a PR; it
 never submits an approving review, merges, tags or publishes. The maintainer
 can review the bot-authored PR using GitHub's normal **Approve** action.
+The tag is validated before selecting the committed
+`docs/releases/<version>-review.md` proposal body. Proposal mode does not require
+or create the future version tag.
 
 The repository's Actions setting permits PR creation by the workflow token.
 The token has read access by default; only the proposal job receives
