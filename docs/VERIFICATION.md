@@ -11,8 +11,9 @@ the private HAR tool/lab packages retain separate 0.1.0 identifiers.
   five desktop and two MCP. Fixtures exercise real local HTTP/TLS and fake ADB;
   these tests do not establish a newly validated device/desktop interaction.
 - TypeScript/Vite production build and all 15 frontend interaction tests passed.
-- All 202 HAR tests, including composite entrypoint tests, passed locally.
-  These launch the real bundled CLI in synthetic consumer subprocesses.
+- All 205 HAR tests, including composite entrypoint/integration-helper tests,
+  passed locally. These launch the real bundled CLI in synthetic consumer
+  subprocesses. Synthetic demo and sprint examples also passed.
 - Three Node release/tag/resource tests and three Python installer tests passed.
   npm audit reported zero vulnerabilities, including development dependencies.
 - Gitleaks 8.30.1 found no leaks in a clean snapshot of the candidate's tracked
