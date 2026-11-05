@@ -11,7 +11,7 @@
     "scope-har-compare": "./cli.mjs"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs contracts/*.test.mjs json/*.test.mjs formats/*.test.mjs",
+    "test": "node --test test/*.test.mjs contracts/*.test.mjs json/*.test.mjs formats/*.test.mjs action-test/*.test.mjs",
     "demo": "node examples/run-demo.mjs"
   }
 }
