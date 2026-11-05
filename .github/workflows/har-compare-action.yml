@@ -1,0 +1,72 @@
+name: HAR composite Action
+
+on:
+  pull_request:
+    paths:
+      - '.github/actions/har-compare/**'
+      - 'tools/har-compare/**'
+      - '.github/workflows/har-compare-action.yml'
+  push:
+    paths:
+      - '.github/actions/har-compare/**'
+      - 'tools/har-compare/**'
+      - '.github/workflows/har-compare-action.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: har-composite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  consumer:
+    name: Composite ${{ matrix.scenario }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scenario: clean
+            current: .scope action/tools/har-compare/examples/fixtures/baseline.har
+          - scenario: regression
+            current: .scope action/tools/har-compare/examples/fixtures/missing-field.har
+          - scenario: invalid
+            current: scope-action-ci/invalid.har
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: .scope action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.22.3'
+      - name: Prepare isolated synthetic consumer and spoofed consumer CLI
+        run: node '.scope action/tools/har-compare/action-test/integration-check.mjs' prepare
+      - name: Compare with default caller gating
+        id: default
+        continue-on-error: true
+        uses: ./.scope action/.github/actions/har-compare
+        with:
+          baseline: .scope action/tools/har-compare/examples/fixtures/baseline.har
+          current: ${{ matrix.current }}
+          output: scope-action-ci/${{ matrix.scenario }}-default
+      - name: Compare with deferred caller gating
+        id: deferred
+        uses: ./.scope action/.github/actions/har-compare
+        with:
+          baseline: .scope action/tools/har-compare/examples/fixtures/baseline.har
+          current: ${{ matrix.current }}
+          output: scope-action-ci/${{ matrix.scenario }}-deferred
+          fail-on-result: 'false'
+      - name: Require real status, complete outputs and minimized reports
+        if: always()
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          DEFAULT_OUTCOME: ${{ steps.default.outcome }}
+          DEFERRED_OUTCOME: ${{ steps.deferred.outcome }}
+          DEFAULT_OUTPUTS: ${{ toJSON(steps.default.outputs) }}
+          DEFERRED_OUTPUTS: ${{ toJSON(steps.deferred.outputs) }}
+        run: node '.scope action/tools/har-compare/action-test/integration-check.mjs' verify

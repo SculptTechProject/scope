@@ -1,0 +1,63 @@
+# INACTIVE EXAMPLE: copy into your repository's .github/workflows/ to enable.
+# Runs with synthetic captures in any consumer repository; no real HAR needed.
+name: Scope composite HAR comparison example
+on:
+  workflow_dispatch:
+    inputs:
+      upload_reports:
+        description: Upload reviewed synthetic derived reports for three days
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out the Action and its synthetic fixtures separately
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: dalkedev/scope
+          # Planned release tag; use after publication, then pin an inspected full SHA.
+          # v1.1.0 predates the Action and cannot be used here.
+          ref: v1.2.0
+          path: .scope-har-tool
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.22.3'
+      - name: Compare synthetic timestamps with an explicit ignore
+        id: compare
+        uses: ./.scope-har-tool/.github/actions/har-compare
+        with:
+          baseline: .scope-har-tool/tools/har-compare/examples/fixtures/baseline.har
+          current: .scope-har-tool/tools/har-compare/examples/fixtures/timestamp.har
+          config: .scope-har-tool/tools/har-compare/examples/fixtures/ignore-timestamp.json
+          output: scope-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: ids
+          fail-on-result: 'false'
+      - name: Explicit opt-in upload of derived reports only
+        if: always() && inputs.upload_reports && steps.compare.outputs.json-report != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scope-har-derived-reports
+          path: |
+            ${{ steps.compare.outputs.json-report }}
+            ${{ steps.compare.outputs.html-report }}
+            ${{ steps.compare.outputs.junit-report }}
+          if-no-files-found: error
+          retention-days: 3
+      - name: Enforce comparison result, including missing output
+        if: always()
+        env:
+          COMPARE_EXIT: ${{ steps.compare.outputs.exit-code }}
+        shell: bash
+        run: |
+          case "$COMPARE_EXIT" in
+            0|1|2) exit "$COMPARE_EXIT" ;;
+            *) echo '::error::No valid comparison result'; exit 2 ;;
+          esac

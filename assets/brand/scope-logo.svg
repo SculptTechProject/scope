@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Scope</title>
+  <desc>Two opposing cyan request and response paths frame an open inspection window.</desc>
+  <path fill="#2DDED1" d="M12 40h28V20h68v64H92V36H56v20H12V40Z"/>
+  <path fill="#2DDED1" d="M20 64h16v28h36V76h44v16H88v16H20V64Z"/>
+</svg>
