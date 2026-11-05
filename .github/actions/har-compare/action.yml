@@ -1,0 +1,61 @@
+name: Scope offline HAR comparison
+description: Compare local HAR captures with authored contracts and offline JSON, HTML and JUnit reports.
+inputs:
+  baseline:
+    description: Baseline HAR path, absolute or relative to GITHUB_WORKSPACE.
+    required: true
+  current:
+    description: Current HAR path, absolute or relative to GITHUB_WORKSPACE.
+    required: true
+  config:
+    description: Optional CLI JSON config path, absolute or relative to GITHUB_WORKSPACE.
+    default: ''
+  output:
+    description: New report directory; must not already exist. Relative paths use GITHUB_WORKSPACE.
+    required: true
+  labels:
+    description: Report labels, ids (default) or readable (explicitly includes captured labels).
+    default: ids
+  fail-on-result:
+    description: 'true exits with CLI status 0/1/2; false defers gating to the caller using exit-code.'
+    default: 'true'
+outputs:
+  exit-code:
+    description: '0 = clean; 1 = regression; 2 = invalid or incomplete. Empty if the runner cannot start the entrypoint.'
+    value: ${{ steps.compare.outputs.exit-code }}
+  result:
+    description: clean, regression, or invalid.
+    value: ${{ steps.compare.outputs.result }}
+  regressions:
+    description: Regression candidate count, empty for invalid analysis.
+    value: ${{ steps.compare.outputs.regressions }}
+  informational:
+    description: Informational finding count, empty for invalid analysis.
+    value: ${{ steps.compare.outputs.informational }}
+  error-code:
+    description: CLI or ACTION_* diagnostic code for invalid analysis; otherwise empty.
+    value: ${{ steps.compare.outputs.error-code }}
+  json-report:
+    description: Absolute path to analysis.json, empty for invalid analysis.
+    value: ${{ steps.compare.outputs.json-report }}
+  html-report:
+    description: Absolute path to report.html, empty for invalid analysis.
+    value: ${{ steps.compare.outputs.html-report }}
+  junit-report:
+    description: Absolute path to results.xml, empty for invalid analysis.
+    value: ${{ steps.compare.outputs.junit-report }}
+runs:
+  using: composite
+  steps:
+    - name: Compare local HAR captures
+      id: compare
+      shell: bash
+      env:
+        SCOPE_ACTION_PATH: ${{ github.action_path }}
+        SCOPE_BASELINE: ${{ inputs.baseline }}
+        SCOPE_CURRENT: ${{ inputs.current }}
+        SCOPE_CONFIG: ${{ inputs.config }}
+        SCOPE_OUTPUT: ${{ inputs.output }}
+        SCOPE_LABELS: ${{ inputs.labels }}
+        SCOPE_FAIL_ON_RESULT: ${{ inputs.fail-on-result }}
+      run: node "$SCOPE_ACTION_PATH/run.mjs"
