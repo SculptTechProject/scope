@@ -2,6 +2,12 @@
 
 User-visible changes are recorded here. Back up important captures before upgrading.
 
+## Unreleased
+
+- Structured desktop traffic search with combined method, host, status, body,
+  lifecycle and edited predicates. Literal search remains available, and syntax
+  help includes clickable examples. [Query syntax and limits](docs/SEARCH.md).
+
 ## 1.0.0 — 2026-11-02
 
 - Persistent ordered request/response rewrites, mock responses and blocking, with validated atomic updates and per-request rule snapshots.
