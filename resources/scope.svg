@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect x="36" y="36" width="952" height="952" rx="224" fill="#20395b"/>
-  <circle cx="480" cy="474" r="230" fill="none" stroke="#edf4ff" stroke-width="64"/>
-  <path d="M642 648 788 794" stroke="#edf4ff" stroke-width="78" stroke-linecap="round"/>
-  <path d="M300 485h95l55-110 77 212 55-102h78" fill="none" stroke="#55d8c6" stroke-width="49" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Scope</title>
+  <desc>Two opposing cyan request and response paths frame an open inspection window.</desc>
+  <path fill="#2DDED1" d="M12 40h28V20h68v64H92V36H56v20H12V40Z"/>
+  <path fill="#2DDED1" d="M20 64h16v28h36V76h44v16H88v16H20V64Z"/>
 </svg>
