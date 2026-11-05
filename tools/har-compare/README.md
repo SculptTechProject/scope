@@ -346,6 +346,13 @@ The fixtures and checked-in reports here contain synthetic `.invalid` traffic.
 
 ## GitHub Actions
 
+Use the [reusable composite Action](../../.github/actions/har-compare/README.md)
+from another repository with explicit local baseline/current/config/output paths.
+It bundles this CLI, defaults to ID-only labels, exposes 0/1/2 result outputs,
+and never uploads captures or reports automatically. The inactive
+[synthetic consumer workflow](examples/github-actions-composite.yml) demonstrates
+an explicit derived-report upload choice and a final status gate.
+
 The [isolated HAR test job](docs/ci.md) runs the product, demos, DOM and
 sandboxed browser checks using only locked lab dependencies and synthetic data.
 See [verification](docs/verification.md) for observed results and remaining gates.
