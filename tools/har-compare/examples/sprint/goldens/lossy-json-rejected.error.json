@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "error": {
+    "code": "NUMBER",
+    "message": "JSON number loses decimal precision during parsing."
+  }
+}

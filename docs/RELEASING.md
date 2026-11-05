@@ -2,23 +2,27 @@
 
 ## Review, tag and publication
 
-The `release/1.0.0` branch carries the 1.0.0 changes. Opening a proposal does not
+The `release/<version>` branch carries the proposed changes, currently
+`release/1.1.0`. Opening a proposal does not
 create a tag or a public release. [Governance](GOVERNANCE.md) describes the required
 maintainer review and bot-authored PR, which lets the maintainer use native
 GitHub approval. Dispatch `release.yml` on this branch with `mode: proposal`
-to open that PR. This mode skips all release build/upload jobs.
+with the matching `tag: v<version>` to open that PR. The workflow validates that
+the branch matches the version and reads `docs/releases/<version>-review.md`.
+This mode skips all release build/upload jobs and creates no tag.
 
 After review and successful required checks, merge the PR and tag the reviewed
-main commit. Dispatch the same workflow with `mode: draft` and `tag: v1.0.0` to
+main commit. Dispatch the same workflow with `mode: draft` and `tag: v1.1.0` to
 build the existing tag into a draft prerelease. Inspect the assets and use
-[the 1.0.0 release notes](releases/1.0.0.md) as the publication body. Publication
+[the 1.1.0 release notes](releases/1.1.0.md) as the publication body. Publication
 is a separate maintainer action; for a stable release, clear both the draft and
 prerelease flags. Keep historical release assets attached to their original tags.
 
 The first public prerelease, `v0.1.0-alpha.1`, used application version `0.1.0`;
-the 1.0.0 source uses application version `1.0.0`.
-Repository: [SculptTechProject/scope](https://github.com/SculptTechProject/scope).
-The interactively tested host is macOS Apple Silicon. Windows/Linux packages
+the current source uses application version `1.1.0`.
+Repository: [dalkedev/scope](https://github.com/dalkedev/scope).
+The recorded 1.0.0 interactive host was macOS Apple Silicon; this does not establish
+new-version interactive validation. Windows/Linux packages
 have CI build and headless-protocol coverage; their interactive installers and
 desktop/device behavior remain experimental and must be labeled accordingly.
 
@@ -86,7 +90,7 @@ Dependency security findings, including platform-specific warnings, are recorded
 in [DEPENDENCIES.md](DEPENDENCIES.md). A passing build is not a claim that those
 warnings or platform runtime checks are resolved.
 
-The 1.0.0 macOS app is ad-hoc signed, without Apple notarization. Do not describe
+The public macOS app is ad-hoc signed, without Apple notarization. Do not describe
 it as notarized. Verify the final `.app` signature and launch the packaged app,
 then perform a real local capture, reopen its archive and inspect MCP behavior.
 Use [VERIFICATION.md](VERIFICATION.md) to distinguish tests already run from
@@ -99,13 +103,13 @@ before preparing release assets. The helper refuses a dirty tracked checkout or
 a mismatched tag, preventing a source archive from describing different code.
 
 ```sh
-node scripts/release-assets.mjs v1.0.0
+node scripts/release-assets.mjs v1.1.0
 ```
 
 On macOS this produces:
 
-- `Scope-v1.0.0-macOS-arm64.zip`, preserving the app bundle with `ditto`;
-- `Scope-v1.0.0-source.zip`, produced by `git archive` from the exact tag;
+- `Scope-v1.1.0-macOS-arm64.zip`, preserving the app bundle with `ditto`;
+- `Scope-v1.1.0-source.zip`, produced by `git archive` from the exact tag;
 - platform checksums and a build manifest recording the commit and exclusion of
   optional Frida binaries.
 

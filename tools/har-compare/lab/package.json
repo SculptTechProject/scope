@@ -1,0 +1,28 @@
+{
+  "name": "scope-har-compare-local-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=22.22.3"
+  },
+  "scripts": {
+    "test": "node --test --test-timeout=10000 test/*.test.mjs",
+    "verify": "node verify.mjs",
+    "doctor": "node verify.mjs",
+    "demo": "node run-node-demo.mjs",
+    "test:browser": "node browser-check.mjs",
+    "capture:browser": "node capture-demo.mjs",
+    "test:seeded": "node run-seeded-checks.mjs",
+    "test:contracts": "node run-contract-checks.mjs",
+    "test:boundaries": "node run-boundary-checks.mjs",
+    "test:outputs": "node run-output-checks.mjs",
+    "test:payloads": "node run-payload-checks.mjs"
+  },
+  "devDependencies": {
+    "@xmldom/xmldom": "0.9.12",
+    "playwright": "1.64.1",
+    "jsdom": "26.1.0"
+  }
+}

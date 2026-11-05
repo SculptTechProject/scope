@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "tool": "scope-har-compare",
+  "config": {
+    "mode": "strict",
+    "ignoreJsonPaths": [],
+    "includeOperations": [
+      {
+        "method": "GET",
+        "origin": "https://synthetic.invalid",
+        "path": "/billing"
+      },
+      {
+        "method": "GET",
+        "origin": "https://synthetic.invalid",
+        "path": "/health"
+      }
+    ]
+  },
+  "summary": {
+    "baselineEntries": 2,
+    "candidateEntries": 2,
+    "pairedEntries": 2,
+    "operations": 2,
+    "regressions": 2,
+    "informational": 0,
+    "ignoredNodes": 0
+  },
+  "notices": [
+    {
+      "kind": "query-omitted",
+      "operation": "operation-0001"
+    },
+    {
+      "kind": "query-omitted",
+      "operation": "operation-0002"
+    }
+  ],
+  "operations": [
+    {
+      "id": "operation-0001",
+      "method": "GET",
+      "origin": "https://synthetic.invalid",
+      "path": "/billing",
+      "queryValuesOmitted": true,
+      "baseline": [
+        {
+          "entry": 3
+        }
+      ],
+      "candidate": [
+        {
+          "entry": 3
+        }
+      ]
+    },
+    {
+      "id": "operation-0002",
+      "method": "GET",
+      "origin": "https://synthetic.invalid",
+      "path": "/health",
+      "queryValuesOmitted": true,
+      "baseline": [
+        {
+          "entry": 2
+        }
+      ],
+      "candidate": [
+        {
+          "entry": 2
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "finding-00001",
+      "operation": "operation-0001",
+      "occurrence": 1,
+      "evidence": {
+        "baselineEntry": 3,
+        "candidateEntry": 3
+      },
+      "kind": "value-changed",
+      "severity": "regression",
+      "path": "/timestamp"
+    },
+    {
+      "id": "finding-00002",
+      "operation": "operation-0002",
+      "occurrence": 1,
+      "evidence": {
+        "baselineEntry": 2,
+        "candidateEntry": 2
+      },
+      "kind": "value-changed",
+      "severity": "regression",
+      "path": "/timestamp"
+    }
+  ],
+  "coverage": {
+    "baseline": {
+      "totalEntries": 3,
+      "selectedEntries": 2,
+      "excludedEntries": 1
+    },
+    "candidate": {
+      "totalEntries": 3,
+      "selectedEntries": 2,
+      "excludedEntries": 1
+    }
+  }
+}

@@ -4,6 +4,7 @@
 mod proxy;
 mod report;
 mod rules;
+mod search;
 mod sessions;
 
 pub use rules::{AppliedRule, RuleAction, RuleMatcher, TrafficProvenance, TrafficRule};
@@ -340,41 +341,32 @@ impl Engine {
         offset: usize,
     ) -> Result<Vec<Exchange>> {
         self.session(session_id)?;
+        let query = search::Query::parse(query)?;
+        let limit = limit.min(10_000);
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
         let db = self.inner.db.lock().unwrap();
         // Search the decoded persisted fields, including bodies, without SQL wildcard semantics.
         let mut st = db.prepare(
             "SELECT data FROM exchanges WHERE session_id=?1 ORDER BY started_at DESC,rowid DESC",
         )?;
         let rows = st.query_map([session_id], |r| r.get::<_, String>(0))?;
-        let needle = query.unwrap_or("").to_lowercase();
         let mut found = Vec::new();
         let mut skipped = 0;
         for row in rows {
             let e: Exchange = serde_json::from_str(&row?)?;
-            if !needle.is_empty()
-                && !format!(
-                    "{} {} {:?} {} {} {:?} {:?}",
-                    e.method,
-                    e.url,
-                    e.status,
-                    e.request_body,
-                    e.response_body,
-                    e.request_headers,
-                    e.response_headers
-                )
-                .to_lowercase()
-                .contains(&needle)
-            {
+            if !query.matches(&e) {
                 continue;
             }
             if skipped < offset {
                 skipped += 1;
                 continue;
             }
-            if found.len() >= limit.min(10_000) {
+            found.push(e);
+            if found.len() >= limit {
                 break;
             }
-            found.push(e);
         }
         Ok(found)
     }

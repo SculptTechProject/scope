@@ -2,6 +2,24 @@
 
 User-visible changes are recorded here. Back up important captures before upgrading.
 
+## Unreleased
+
+## 1.1.0 — 2026-11-05
+
+- Structured desktop traffic search with combined method, host, status, body,
+  lifecycle and edited predicates. Literal search remains available, and syntax
+  help includes clickable examples. [Query syntax and limits](docs/SEARCH.md).
+- Offline HAR comparison CLI with exact operation selection, scoped JSON ignores,
+  explicit status/field/type contracts and deterministic JSON, escaped HTML and
+  JUnit reports. [Usage and privacy boundaries](tools/har-compare/README.md).
+- Lower native session-import peak memory by consuming the owned exchange tree
+  instead of cloning it. Bounded Linux debug-profile measurements and unchanged
+  atomic validation are documented in [the results](docs/NATIVE_IMPORT_MEMORY.md).
+- Active isolated HAR CI with hostile-report and sandboxed Chromium/CSP checks;
+  cross-platform desktop tests cover the combined changes.
+- Current maintainer CODEOWNERS and a version-matched bot-authored release
+  proposal flow. Required approvals and branch protections remain enabled.
+
 ## 1.0.0 — 2026-11-02
 
 - Persistent ordered request/response rewrites, mock responses and blocking, with validated atomic updates and per-request rule snapshots.

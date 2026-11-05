@@ -9,14 +9,14 @@
 
 <p align="center">
   <a href="docs/GETTING_STARTED.md">Get started</a> ·
-  <a href="https://github.com/SculptTechProject/scope/releases">Downloads</a> ·
+  <a href="https://github.com/dalkedev/scope/releases">Downloads</a> ·
   <a href="docs/SCREENSHOTS.md">Screenshots</a> ·
   <a href="docs/MCP.md">MCP</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/SculptTechProject/scope/actions/workflows/checks.yml"><img src="https://github.com/SculptTechProject/scope/actions/workflows/checks.yml/badge.svg?branch=main" alt="Build and check"></a>
+  <a href="https://github.com/dalkedev/scope/actions/workflows/checks.yml"><img src="https://github.com/dalkedev/scope/actions/workflows/checks.yml/badge.svg?branch=main" alt="Build and check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-2f64ed" alt="AGPL-3.0-or-later license"></a>
 </p>
 
@@ -24,7 +24,7 @@ Scope routes traffic through a Rust engine, gives you control over requests and 
 
 **Local capture, saved sessions and export need no account or subscription.** Built-in analysis runs locally. You choose which sessions an external agent can access.
 
-> **This README describes Scope 1.0.0.** Check [Releases](https://github.com/SculptTechProject/scope/releases) for published builds and platform notes. Earlier alpha downloads do not include all the features below. [Verification record →](docs/VERIFICATION.md)
+> **This README describes Scope 1.1.0.** Check [Releases](https://github.com/dalkedev/scope/releases) for published builds and platform notes. Earlier alpha downloads do not include all the features below. [Verification record →](docs/VERIFICATION.md)
 
 <a href="docs/SCREENSHOTS.md"><img src="docs/images/traffic-inspector.jpg" alt="Real captured traffic: a products request returns a local HTTP 503 mock, with its rule and response JSON visible." width="100%"></a>
 
@@ -54,12 +54,32 @@ Open Scope and select **Generate real test traffic** — the lightning bolt besi
 
 No Android device is needed for this first run. [Continue with HTTPS, Android, breakpoints and export →](docs/GETTING_STARTED.md)
 
+### Find the request. Check the API change.
+
+The desktop now accepts combined filters such as `filter: method=POST status>=500`
+or `filter: body~="rate limit"`. Conditions apply before pagination; ordinary
+text searches remain available. [Search syntax →](docs/SEARCH.md)
+
+The source distribution also includes a separate, dependency-free Node CLI:
+
+```sh
+node tools/har-compare/cli.mjs compare --baseline before.har --candidate after.har \
+  --json new-report.json --html new-report.html --junit new-report.xml --labels ids
+```
+
+Compare saved HARs locally, author status/JSON requirements and attach deterministic
+reports to CI. Exit codes distinguish a clean comparison (`0`), configured
+regressions (`1`) and incomplete/invalid analysis (`2`). Observation alone is not
+an API contract: an unchanged HTTP 500 needs an explicit status assertion to fail.
+Reports minimize captured data; inspect them before sharing.
+[CLI, examples and privacy limits →](tools/har-compare/README.md)
+
 ### Build from source
 
 Install Rust, Node.js **22.13+** and [Tauri's native prerequisites](https://v2.tauri.app/start/prerequisites/). The repository pins the Rust compiler and dependency lockfiles.
 
 ```sh
-git clone https://github.com/SculptTechProject/scope.git
+git clone https://github.com/dalkedev/scope.git
 cd scope
 npm ci
 npm run desktop
@@ -96,12 +116,12 @@ The same engine powers the native inspector and MCP. Real HTTP/TLS fixtures test
 
 | Today                   | Boundary                                                                                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| macOS arm64             | Native UI and packaged workflows checked locally. Ad-hoc signed; not Apple-notarized.                                                                                     |
+| macOS arm64             | Local UI/package evidence is recorded by version; the 1.1.0 interactive check remains open. Ad-hoc signed; not Apple-notarized.                                          |
 | Windows x64 / Linux x64 | CI builds, packages and headless MCP/capture smoke pass. Interactive UI and device validation remain open. Intel macOS is unverified.                                     |
 | Android / Frida         | Earlier smoke covered one rooted Android 16 arm64 emulator. The 1.0 diagnostics changes use fixtures; arbitrary apps and TLS stacks are unverified.                       |
 | Capture                 | Bodies are buffered up to **16 MiB each**. Streaming, WebSocket frames, trailers and HTTP3 are not implemented.                                                           |
 | Archives & analysis     | Records currently load into memory. Large-session streaming/export is planned. Observed schemas are not complete API contracts.                                           |
-| Dependencies            | A Linux glib unsoundness advisory remains tracked in [#11](https://github.com/SculptTechProject/scope/issues/11). See the full [dependency record](docs/DEPENDENCIES.md). |
+| Dependencies            | A Linux glib unsoundness advisory remains tracked in [#11](https://github.com/dalkedev/scope/issues/11). See the full [dependency record](docs/DEPENDENCIES.md). |
 
 Breakpoints expire after 60 seconds. [What was actually tested →](docs/VERIFICATION.md)
 
@@ -109,12 +129,12 @@ Breakpoints expire after 60 seconds. [What was actually tested →](docs/VERIFIC
 
 Useful contributions include reproducible device/OS reports, protocol fixtures, platform validation and improvements to large-capture handling. The roadmap connects proposals to [real public user feedback](docs/USER-NEEDS.md), with a clear distinction between delivered features and planned work.
 
-[Contributing](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) · [Report a bug](https://github.com/SculptTechProject/scope/issues/new/choose) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+[Contributing](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) · [Report a bug](https://github.com/dalkedev/scope/issues/new/choose) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 Every change goes through maintainer review and required platform checks. [Ownership & release process →](docs/GOVERNANCE.md)
 
 ---
 
-An independent project by **[SculptTechProject](https://github.com/SculptTechProject)**. Scope includes attributed HTTP Toolkit interception scripts and Frida integration; their original licenses and notices remain intact. HTTP Toolkit does not need to be installed.
+An independent project by **[dalkedev](https://github.com/dalkedev)**. Scope includes attributed HTTP Toolkit interception scripts and Frida integration; their original licenses and notices remain intact. HTTP Toolkit does not need to be installed.
 
 **AGPL-3.0-or-later** · [License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md)

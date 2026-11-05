@@ -1,0 +1,25 @@
+{
+  "mode": "strict",
+  "includeOperations": [
+    {
+      "method": "GET",
+      "origin": "https://synthetic.invalid",
+      "path": "/health"
+    },
+    {
+      "method": "GET",
+      "origin": "https://synthetic.invalid",
+      "path": "/billing"
+    }
+  ],
+  "scopedIgnores": [
+    {
+      "method": "GET",
+      "origin": "https://synthetic.invalid",
+      "path": "/health",
+      "pointers": [
+        "/timestamp"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Scope's maintainer reviews every change, including these ownership rules.
-* @SculptTechProject
+* @dalkedev
 
-/.github/ @SculptTechProject
-/resources/device/ @SculptTechProject
-/THIRD_PARTY_NOTICES.md @SculptTechProject
+/.github/ @dalkedev
+/resources/device/ @dalkedev
+/THIRD_PARTY_NOTICES.md @dalkedev

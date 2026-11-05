@@ -1,0 +1,90 @@
+name: HAR comparison
+
+on:
+  pull_request:
+    paths:
+      - 'tools/har-compare/**'
+      - '.github/workflows/har-compare.yml'
+  push:
+    paths:
+      - 'tools/har-compare/**'
+      - '.github/workflows/har-compare.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: har-compare-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-and-browser:
+    # Clean hosted non-root runner; no host security changes or sandbox bypass.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.22.3'
+      - name: Configure isolated browser storage
+        run: printf 'PLAYWRIGHT_BROWSERS_PATH=%s/scope-har-browsers\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Install isolated locked QA dependencies
+        run: npm ci --ignore-scripts --prefix tools/har-compare/lab
+      - name: Install pinned Chromium and runner libraries
+        run: node tools/har-compare/lab/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Test offline tool and lab
+        run: |
+          npm test --prefix tools/har-compare
+          npm test --prefix tools/har-compare/lab
+      - name: Verify synthetic demos and DOM safety
+        run: |
+          node tools/har-compare/examples/run-demo.mjs
+          node tools/har-compare/examples/sprint/run.mjs
+          node tools/har-compare/examples/check-html-dom.mjs
+      - name: Require sandboxed real browser hostile report and CSP checks
+        # Launch errors exit nonzero. No continue-on-error or successful limitation receipt.
+        run: |
+          test "$(id -u)" -ne 0
+          node tools/har-compare/lab/browser-check.mjs chromium
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readdir, readFile } from 'node:fs/promises';
+          const root = 'tools/har-compare/lab/output';
+          const dirs = (await readdir(root)).filter(name => name.startsWith('browser-'));
+          assert.equal(dirs.length, 1, 'clean runner must produce exactly one browser receipt');
+          const receipt = JSON.parse(await readFile(`${root}/${dirs[0]}/receipt.json`, 'utf8'));
+          assert.equal(receipt.status, 'passed');
+          assert.equal(receipt.scriptExecution, false);
+          assert.equal(receipt.attemptedNetworkRequests, 0);
+          assert.equal(receipt.detectorPositiveControl.scriptExecution, true);
+          assert.equal(receipt.detectorPositiveControl.attemptedNetworkDetected, true);
+          assert.deepEqual(receipt.csp, { inlineScriptBlocked: true, unhashedStyleBlocked: true, authorizedStyleRendered: true });
+          assert.deepEqual(receipt.screenshots, ['hostile-report.png', 'hostile-report-expanded.png']);
+          NODE
+      - name: Upload allowlisted synthetic reports and screenshots
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: har-compare-synthetic-reports
+          path: |
+            tools/har-compare/out/demo-*/missing-field.html
+            tools/har-compare/out/demo-*/missing-field.json
+            tools/har-compare/out/demo-*/http-500.html
+            tools/har-compare/out/demo-*/http-500.json
+            tools/har-compare/out/demo-*/timestamp-ignored.html
+            tools/har-compare/out/demo-*/timestamp-ignored.json
+            tools/har-compare/out/demo-*/timestamp-strict.html
+            tools/har-compare/out/demo-*/timestamp-strict.json
+            tools/har-compare/out/demo-*/mixed-selected.html
+            tools/har-compare/out/demo-*/mixed-selected.json
+            tools/har-compare/out/demo-*/mixed-clean.html
+            tools/har-compare/out/demo-*/mixed-clean.json
+            tools/har-compare/lab/output/browser-*/hostile-report.html
+            tools/har-compare/lab/output/browser-*/hostile-report.png
+            tools/har-compare/lab/output/browser-*/hostile-report-expanded.png
+            tools/har-compare/lab/output/browser-*/receipt.json
+          if-no-files-found: error
+          retention-days: 3

@@ -225,12 +225,12 @@ impl Engine {
             json!({"format":"scope-session","version":1,"session":self.session(session_id)?,"exchanges":self.all_exchanges(session_id)?}),
         )
     }
-    pub fn import_session(&self, value: Value) -> Result<Session> {
+    pub fn import_session(&self, mut value: Value) -> Result<Session> {
         if value["format"] != "scope-session" || value["version"] != 1 {
             bail!("Unsupported Scope session format/version");
         }
         let original: Session = serde_json::from_value(value["session"].clone())?;
-        let exchanges: Vec<Exchange> = serde_json::from_value(value["exchanges"].clone())?;
+        let exchanges: Vec<Exchange> = serde_json::from_value(value["exchanges"].take())?;
         self.import_validated(
             original.name,
             "import".into(),

@@ -350,6 +350,9 @@ async fn concurrent_exchanges_keep_request_response_pairing() {
             assert_eq!(
                 client
                     .post(url)
+                    // Pairing is independent of CI storage speed; archive commits serialize.
+                    // Keep all 32 requests concurrent without changing production timeouts.
+                    .timeout(Duration::from_secs(30))
                     .body(body.clone())
                     .send()
                     .await

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "tool": "scope-har-compare",
+  "config": {
+    "mode": "shape",
+    "ignoreJsonPaths": [],
+    "contracts": [
+      {
+        "method": "GET",
+        "origin": "https://synthetic.invalid",
+        "path": "/users",
+        "allowedStatuses": [
+          200
+        ]
+      }
+    ]
+  },
+  "summary": {
+    "baselineEntries": 1,
+    "candidateEntries": 1,
+    "pairedEntries": 1,
+    "operations": 1,
+    "regressions": 1,
+    "informational": 0,
+    "ignoredNodes": 0
+  },
+  "notices": [
+    {
+      "kind": "query-omitted",
+      "operation": "operation-0001"
+    }
+  ],
+  "operations": [
+    {
+      "id": "operation-0001",
+      "method": "GET",
+      "origin": "https://synthetic.invalid",
+      "path": "/users",
+      "queryValuesOmitted": true,
+      "baseline": [
+        {
+          "entry": 1
+        }
+      ],
+      "candidate": [
+        {
+          "entry": 1
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "contract-finding-00001",
+      "rule": 1,
+      "severity": "regression",
+      "evidence": {
+        "baselineEntry": 1,
+        "candidateEntry": 1
+      },
+      "kind": "contract-status",
+      "status": {
+        "after": 500
+      },
+      "source": "authored-contract",
+      "operation": "operation-0001",
+      "occurrence": 1
+    }
+  ],
+  "contracts": {
+    "rules": 1,
+    "checks": 1,
+    "regressions": 1
+  }
+}

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="1" errors="0" skipped="0">
+  <testsuite name="scope-har-compare" tests="1" failures="1" errors="0" skipped="0">
+    <testcase classname="scope-har-compare" name="contract-finding-00001: contract-json-missing · GET https://synthetic.invalid/users">
+      <failure message="contract-json-missing" type="contract-json-missing">finding: contract-finding-00001
+kind: contract-json-missing
+baseline entry: 1
+candidate entry: 1
+occurrence: 1
+JSON pointer: /user/role
+contract rule: 1
+contract requirement: 1</failure>
+      <system-out>finding: contract-finding-00001
+kind: contract-json-missing
+baseline entry: 1
+candidate entry: 1
+occurrence: 1
+JSON pointer: /user/role
+contract rule: 1
+contract requirement: 1</system-out>
+    </testcase>
+  </testsuite>
+</testsuites>
