@@ -594,6 +594,35 @@ textarea::placeholder {
   padding: 12px 14px;
   min-height: 56px;
 }
+.traffic-search-help {
+  padding: 8px 14px;
+  border-bottom: 1px solid #e3e8ef;
+  font-size: 11px;
+  color: #4b5d6f;
+}
+.traffic-search-help summary {
+  cursor: pointer;
+}
+.traffic-search-help p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+.traffic-search-help [role='alert'] {
+  color: #b42318;
+}
+.traffic-search-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.traffic-search-examples button {
+  border: 1px solid #d8e1ed;
+  border-radius: 5px;
+  background: #f6f8fc;
+  padding: 5px 8px;
+  color: inherit;
+  cursor: pointer;
+}
 .search-field {
   display: flex;
   align-items: center;

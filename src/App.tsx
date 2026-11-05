@@ -45,7 +45,9 @@ import {
 } from 'lucide-react';
 import { api, isNative } from './api';
 import { isExchangeError } from './exchange-utils';
+import { queryTraffic } from './traffic-search';
 import { ExchangeStatus as Status } from './components/ExchangeStatus';
+import { TrafficSearchHelp } from './components/TrafficSearchHelp';
 import { RulesWorkspace } from './components/RulesWorkspace';
 import { ReplayComposer } from './components/ReplayComposer';
 import { SessionDetails } from './components/SessionDetails';
@@ -228,6 +230,7 @@ export default function App() {
   const [view, setView] = useState<View>('traffic');
   const [panel, setPanel] = useState<Panel>(null);
   const [query, setQuery] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [limit, setLimit] = useState(250);
   const [busy, setBusy] = useState('');
@@ -306,6 +309,7 @@ export default function App() {
     sessionIdRef.current = sessionId;
     setSelected(null);
     setExchanges([]);
+    setSearchError('');
     setLimit(250);
     setAnalysis(null);
     setComparison(null);
@@ -316,14 +320,12 @@ export default function App() {
     let alive = true;
     const timer = window.setTimeout(
       () => {
-        api
-          .list_exchanges(sessionId, query, limit)
-          .then((rows) => {
-            if (alive) setExchanges(rows);
-          })
-          .catch((e) => {
-            if (alive) setError(errorText(e));
-          });
+        queryTraffic(sessionId, query, limit).then(({ rows, error }) => {
+          if (alive) {
+            setExchanges(rows);
+            setSearchError(error);
+          }
+        });
       },
       query ? 220 : 0,
     );
@@ -420,7 +422,6 @@ export default function App() {
         throw new Error('Stop the active capture before generating traffic in another session.');
       await api.generate_demo(id);
       await refreshSessions();
-      setExchanges(await api.list_exchanges(id, query, limit));
       setNotice('Real HTTP requests captured through your local proxy.');
     });
   const exportFile = (format: 'har' | 'scope' | 'openapi') =>
@@ -909,7 +910,7 @@ export default function App() {
                     <input
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Filter URLs, headers or body…"
+                      placeholder="Search text or filter: method=POST status>=400"
                       aria-label="Filter captured traffic"
                     />
                     {query && (
@@ -969,6 +970,7 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+                <TrafficSearchHelp error={searchError} onSelect={setQuery} />
                 <div className={`traffic-split ${selected ? 'has-selection' : ''}`}>
                   <div className="traffic-table-wrap">
                     <table className="traffic-table">
@@ -1234,19 +1236,18 @@ export default function App() {
           onResolve={(edit) =>
             void perform('resolve', async () => {
               await api.resolve_breakpoint(activePending.id, edit);
-              setPending(await api.pending());
-              await refreshSessions();
-              if (selected?.id === activePending.exchangeId) {
-                const full = await api.get_exchange(activePending.exchangeId);
-                setSelected(full);
-              }
-              setExchanges(await api.list_exchanges(sessionId, query, limit));
               setActivePending(null);
               setNotice(
                 edit.action === 'abort'
                   ? 'Message aborted.'
                   : 'Message continued with your changes.',
               );
+              setPending(await api.pending());
+              await refreshSessions();
+              if (selected?.id === activePending.exchangeId) {
+                const full = await api.get_exchange(activePending.exchangeId);
+                setSelected(full);
+              }
             })
           }
         />

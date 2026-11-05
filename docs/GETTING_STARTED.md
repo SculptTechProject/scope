@@ -18,6 +18,10 @@ The fixture includes a deliberate 401 sign-in response, a slow endpoint and repe
 
 Select a row and switch between request, response, headers, body, timing and originals. Open **Analysis** to inspect observed endpoint/status/timing patterns. **Compare** accepts two saved sessions.
 
+Find related failures with `filter: method=POST status>=400`, or search ordinary
+text as before. **Search syntax** below the field offers clickable examples.
+[Fields, quoting, lifecycle states and search limits](SEARCH.md).
+
 ## Send traffic from a desktop client
 
 Create a session and select **Start capture**. Configure your client to use the address shown by Scope:
