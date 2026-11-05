@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "tool": "scope-har-compare",
+  "config": {
+    "mode": "shape",
+    "redacted": true,
+    "ignorePointerCount": 0,
+    "selectionRuleCount": null,
+    "contractRuleCount": 1
+  },
+  "summary": {
+    "baselineEntries": 1,
+    "candidateEntries": 1,
+    "pairedEntries": 1,
+    "operations": 1,
+    "regressions": 1,
+    "informational": 0,
+    "ignoredNodes": 0
+  },
+  "notices": [
+    {
+      "kind": "query-omitted",
+      "operation": "operation-0001"
+    }
+  ],
+  "operations": [
+    {
+      "id": "operation-0001",
+      "queryValuesOmitted": true,
+      "baseline": [
+        {
+          "entry": 1
+        }
+      ],
+      "candidate": [
+        {
+          "entry": 1
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "contract-finding-00001",
+      "operation": "operation-0001",
+      "occurrence": 1,
+      "kind": "contract-json-missing",
+      "severity": "regression",
+      "source": "authored-contract",
+      "rule": 1,
+      "requirement": 1,
+      "evidence": {
+        "baselineEntry": 1,
+        "candidateEntry": 1
+      }
+    }
+  ],
+  "privacy": {
+    "labels": "ids",
+    "capturedLabelsOmitted": true
+  },
+  "contracts": {
+    "rules": 1,
+    "checks": 1,
+    "regressions": 1
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "error": {
+    "code": "JSON",
+    "message": "Entry 1 body contains duplicate object names."
+  }
+}

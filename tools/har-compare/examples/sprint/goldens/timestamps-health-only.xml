@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="1" errors="0" skipped="0">
+  <testsuite name="scope-har-compare" tests="1" failures="1" errors="0" skipped="0">
+    <testcase classname="scope-har-compare" name="finding-00001: value-changed · GET https://synthetic.invalid/billing">
+      <failure message="value-changed" type="value-changed">finding: finding-00001
+kind: value-changed
+baseline entry: 3
+candidate entry: 3
+occurrence: 1
+JSON pointer: /timestamp</failure>
+      <system-out>finding: finding-00001
+kind: value-changed
+baseline entry: 3
+candidate entry: 3
+occurrence: 1
+JSON pointer: /timestamp</system-out>
+    </testcase>
+  </testsuite>
+</testsuites>

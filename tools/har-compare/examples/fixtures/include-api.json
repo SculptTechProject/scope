@@ -1,0 +1,9 @@
+{
+  "includeOperations": [
+    {
+      "method": "GET",
+      "origin": "https://api.example.invalid",
+      "path": "/users/7"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "tool": "scope-har-compare",
+  "kind": "inventory",
+  "analysisPerformed": false,
+  "summary": {
+    "entries": 3,
+    "operations": 3
+  },
+  "operations": [
+    {
+      "id": "inventory-operation-0001",
+      "selector": {
+        "method": "GET",
+        "origin": "https://synthetic.invalid",
+        "path": "/"
+      },
+      "entries": [
+        1
+      ],
+      "queryVariants": 1,
+      "statuses": [
+        {
+          "status": 200,
+          "entries": 1
+        }
+      ],
+      "unavailableStatuses": 0,
+      "jsonResponses": 0,
+      "missingJsonBodies": 0,
+      "otherResponses": 1
+    },
+    {
+      "id": "inventory-operation-0002",
+      "selector": {
+        "method": "GET",
+        "origin": "https://synthetic.invalid",
+        "path": "/billing"
+      },
+      "entries": [
+        3
+      ],
+      "queryVariants": 1,
+      "statuses": [
+        {
+          "status": 200,
+          "entries": 1
+        }
+      ],
+      "unavailableStatuses": 0,
+      "jsonResponses": 1,
+      "missingJsonBodies": 0,
+      "otherResponses": 0
+    },
+    {
+      "id": "inventory-operation-0003",
+      "selector": {
+        "method": "GET",
+        "origin": "https://synthetic.invalid",
+        "path": "/health"
+      },
+      "entries": [
+        2
+      ],
+      "queryVariants": 1,
+      "statuses": [
+        {
+          "status": 200,
+          "entries": 1
+        }
+      ],
+      "unavailableStatuses": 0,
+      "jsonResponses": 1,
+      "missingJsonBodies": 0,
+      "otherResponses": 0
+    }
+  ],
+  "configTemplate": {
+    "includeOperations": [
+      {
+        "method": "GET",
+        "origin": "https://synthetic.invalid",
+        "path": "/billing"
+      },
+      {
+        "method": "GET",
+        "origin": "https://synthetic.invalid",
+        "path": "/health"
+      }
+    ]
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "tool": "scope-har-compare",
+  "config": {
+    "mode": "shape",
+    "ignoreJsonPaths": [],
+    "includeOperations": [
+      {
+        "method": "GET",
+        "origin": "https://api.example.invalid",
+        "path": "/users/7"
+      }
+    ]
+  },
+  "summary": {
+    "baselineEntries": 1,
+    "candidateEntries": 1,
+    "pairedEntries": 1,
+    "operations": 1,
+    "regressions": 0,
+    "informational": 0,
+    "ignoredNodes": 0
+  },
+  "notices": [],
+  "operations": [
+    {
+      "id": "operation-0001",
+      "method": "GET",
+      "origin": "https://api.example.invalid",
+      "path": "/users/7",
+      "queryValuesOmitted": false,
+      "baseline": [
+        {
+          "entry": 2,
+          "provenance": "upstream",
+          "edited": false
+        }
+      ],
+      "candidate": [
+        {
+          "entry": 2,
+          "provenance": "upstream",
+          "edited": false
+        }
+      ]
+    }
+  ],
+  "findings": [],
+  "coverage": {
+    "baseline": {
+      "totalEntries": 3,
+      "selectedEntries": 1,
+      "excludedEntries": 2
+    },
+    "candidate": {
+      "totalEntries": 3,
+      "selectedEntries": 1,
+      "excludedEntries": 2
+    }
+  }
+}

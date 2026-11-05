@@ -1,0 +1,55 @@
+# EXAMPLE ONLY: copy to .github/workflows/har-compare.yml after choosing your own
+# fixture paths. This file is not an active workflow and was not dispatched.
+name: HAR API comparison example
+on:
+  pull_request:
+    paths:
+      - 'tools/har-compare/**'
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Official action releases pinned to commit SHAs.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.22.3'
+      - name: Test the offline tool
+        run: npm test --prefix tools/har-compare
+      - name: Compare synthetic timestamp scenario
+        id: compare
+        shell: bash
+        # Keep the real 0/1/2 status while allowing report upload before failing.
+        run: |
+          set +e
+          node tools/har-compare/cli.mjs compare \
+            --baseline tools/har-compare/examples/fixtures/baseline.har \
+            --candidate tools/har-compare/examples/fixtures/timestamp.har \
+            --config tools/har-compare/examples/fixtures/ignore-timestamp.json \
+            --json tools/har-compare/out/analysis.json \
+            --html tools/har-compare/out/report.html \
+            --junit tools/har-compare/out/results.xml
+          result=$?
+          echo "exit_code=$result" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload only derived reports, never raw HAR
+        if: always() && steps.compare.outputs.exit_code != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: har-comparison
+          path: |
+            tools/har-compare/out/analysis.json
+            tools/har-compare/out/report.html
+            tools/har-compare/out/results.xml
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Propagate comparison status
+        if: always() && steps.compare.outputs.exit_code != ''
+        env:
+          COMPARE_EXIT: ${{ steps.compare.outputs.exit_code }}
+        run: exit "$COMPARE_EXIT"

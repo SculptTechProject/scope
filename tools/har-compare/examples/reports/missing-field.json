@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "tool": "scope-har-compare",
+  "config": {
+    "mode": "shape",
+    "ignoreJsonPaths": []
+  },
+  "summary": {
+    "baselineEntries": 1,
+    "candidateEntries": 1,
+    "pairedEntries": 1,
+    "operations": 1,
+    "regressions": 1,
+    "informational": 0,
+    "ignoredNodes": 0
+  },
+  "notices": [],
+  "operations": [
+    {
+      "id": "operation-0001",
+      "method": "GET",
+      "origin": "https://api.example.invalid",
+      "path": "/users/7",
+      "queryValuesOmitted": false,
+      "baseline": [
+        {
+          "entry": 1,
+          "provenance": "upstream",
+          "edited": false
+        }
+      ],
+      "candidate": [
+        {
+          "entry": 1,
+          "provenance": "upstream",
+          "edited": false
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "finding-00001",
+      "operation": "operation-0001",
+      "occurrence": 1,
+      "evidence": {
+        "baselineEntry": 1,
+        "candidateEntry": 1
+      },
+      "kind": "field-removed",
+      "severity": "regression",
+      "path": "/user/role",
+      "types": {
+        "before": "string"
+      }
+    }
+  ]
+}

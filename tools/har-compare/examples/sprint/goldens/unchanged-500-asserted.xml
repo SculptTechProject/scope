@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="1" errors="0" skipped="0">
+  <testsuite name="scope-har-compare" tests="1" failures="1" errors="0" skipped="0">
+    <testcase classname="scope-har-compare" name="contract-finding-00001: contract-status · GET https://synthetic.invalid/users">
+      <failure message="contract-status" type="contract-status">finding: contract-finding-00001
+kind: contract-status
+baseline entry: 1
+candidate entry: 1
+occurrence: 1
+status: unspecified -&gt; 500
+contract rule: 1</failure>
+      <system-out>finding: contract-finding-00001
+kind: contract-status
+baseline entry: 1
+candidate entry: 1
+occurrence: 1
+status: unspecified -&gt; 500
+contract rule: 1</system-out>
+    </testcase>
+  </testsuite>
+</testsuites>
