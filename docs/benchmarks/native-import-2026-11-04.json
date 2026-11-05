@@ -1,0 +1,1274 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-11-04",
+  "platform": "Linux x86_64",
+  "profile": "debug (unoptimized + debuginfo)",
+  "rust": "1.99.1",
+  "zig": "0.17.1",
+  "baselineCommit": "5179f4d1329f041c9aa58c2e89cf3e1260e1b97e",
+  "benchmarkSourceSha256": "c157293a62da9a52c81918e0e9f7a165b057476d634a87da56eabad377e93bcc",
+  "candidateProductionSourceSha256": "90a189899ef5a55dfb8294bd649c86630e42bc6c505df4ac465d74b5002ee4ff",
+  "samplesPerCell": 3,
+  "metric": "absolute process VmHWM sampled immediately after import, before readback/reopen controls; includes fixture generation/setup",
+  "summary": [
+    {
+      "mode": "utf8",
+      "exchanges": 1,
+      "bytesPerBody": 1048576,
+      "decodedBodyBytes": 2097152,
+      "baseline": {
+        "peakRssKiB": {
+          "median": 32052,
+          "min": 32036,
+          "max": 32116
+        },
+        "importSeconds": {
+          "median": 0.113935215,
+          "min": 0.10824403,
+          "max": 0.114016879
+        }
+      },
+      "candidate": {
+        "peakRssKiB": {
+          "median": 29996,
+          "min": 29808,
+          "max": 30028
+        },
+        "importSeconds": {
+          "median": 0.114137633,
+          "min": 0.111327885,
+          "max": 0.1194574
+        }
+      },
+      "medianPeakRssReductionKiB": 2056,
+      "medianPeakRssReductionPercent": 6.41
+    },
+    {
+      "mode": "utf8",
+      "exchanges": 4,
+      "bytesPerBody": 8388608,
+      "decodedBodyBytes": 67108864,
+      "baseline": {
+        "peakRssKiB": {
+          "median": 207916,
+          "min": 207884,
+          "max": 207980
+        },
+        "importSeconds": {
+          "median": 3.646203219,
+          "min": 3.633909506,
+          "max": 3.701250662
+        }
+      },
+      "candidate": {
+        "peakRssKiB": {
+          "median": 142812,
+          "min": 142536,
+          "max": 142888
+        },
+        "importSeconds": {
+          "median": 3.628211668,
+          "min": 3.591938549,
+          "max": 3.742393239
+        }
+      },
+      "medianPeakRssReductionKiB": 65104,
+      "medianPeakRssReductionPercent": 31.31
+    },
+    {
+      "mode": "binary",
+      "exchanges": 1,
+      "bytesPerBody": 1048576,
+      "decodedBodyBytes": 2097152,
+      "baseline": {
+        "peakRssKiB": {
+          "median": 35108,
+          "min": 35068,
+          "max": 35120
+        },
+        "importSeconds": {
+          "median": 0.167926502,
+          "min": 0.165649297,
+          "max": 0.168765252
+        }
+      },
+      "candidate": {
+        "peakRssKiB": {
+          "median": 32320,
+          "min": 32296,
+          "max": 32560
+        },
+        "importSeconds": {
+          "median": 0.17073344,
+          "min": 0.170441706,
+          "max": 0.175679631
+        }
+      },
+      "medianPeakRssReductionKiB": 2788,
+      "medianPeakRssReductionPercent": 7.94
+    },
+    {
+      "mode": "binary",
+      "exchanges": 4,
+      "bytesPerBody": 8388608,
+      "decodedBodyBytes": 67108864,
+      "baseline": {
+        "peakRssKiB": {
+          "median": 267944,
+          "min": 267904,
+          "max": 268016
+        },
+        "importSeconds": {
+          "median": 5.525033905,
+          "min": 5.5074451920000005,
+          "max": 5.554323213
+        }
+      },
+      "candidate": {
+        "peakRssKiB": {
+          "median": 180552,
+          "min": 180544,
+          "max": 180600
+        },
+        "importSeconds": {
+          "median": 5.356998953,
+          "min": 5.306684957,
+          "max": 5.460381786
+        }
+      },
+      "medianPeakRssReductionKiB": 87392,
+      "medianPeakRssReductionPercent": 32.62
+    }
+  ],
+  "samples": [
+    {
+      "afterImport": {
+        "hwmKiB": 32116,
+        "rssKiB": 21936
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2142208,
+        "total": 2142208,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2274056,
+        "wal": 2237192
+      },
+      "beforeImport": {
+        "hwmKiB": 21828,
+        "rssKiB": 21828
+      },
+      "beforeInput": {
+        "hwmKiB": 19572,
+        "rssKiB": 19572
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.114016879,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 2098348,
+      "phase": "baseline",
+      "repeat": 1,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 32052,
+        "rssKiB": 21932
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2142208,
+        "total": 2142208,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2274056,
+        "wal": 2237192
+      },
+      "beforeImport": {
+        "hwmKiB": 21820,
+        "rssKiB": 21820
+      },
+      "beforeInput": {
+        "hwmKiB": 19568,
+        "rssKiB": 19568
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.10824403,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 2098348,
+      "phase": "baseline",
+      "repeat": 2,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 32036,
+        "rssKiB": 21916
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2142208,
+        "total": 2142208,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2274056,
+        "wal": 2237192
+      },
+      "beforeImport": {
+        "hwmKiB": 21808,
+        "rssKiB": 21808
+      },
+      "beforeInput": {
+        "hwmKiB": 19552,
+        "rssKiB": 19552
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.113935215,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 2098348,
+      "phase": "baseline",
+      "repeat": 3,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 207980,
+        "rssKiB": 22008
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 67227648,
+        "total": 67227648,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 163840,
+        "sqlite": 67227648,
+        "total": 135095480,
+        "wal": 67703992
+      },
+      "beforeImport": {
+        "hwmKiB": 84836,
+        "rssKiB": 84836
+      },
+      "beforeInput": {
+        "hwmKiB": 19100,
+        "rssKiB": 19100
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 3.646203219,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 67112796,
+      "phase": "baseline",
+      "repeat": 1,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 207916,
+        "rssKiB": 22072
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 67227648,
+        "total": 67227648,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 163840,
+        "sqlite": 67227648,
+        "total": 135095480,
+        "wal": 67703992
+      },
+      "beforeImport": {
+        "hwmKiB": 84928,
+        "rssKiB": 84928
+      },
+      "beforeInput": {
+        "hwmKiB": 19128,
+        "rssKiB": 19128
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 3.701250662,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 67112796,
+      "phase": "baseline",
+      "repeat": 2,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 207884,
+        "rssKiB": 22040
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 67227648,
+        "total": 67227648,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 163840,
+        "sqlite": 67227648,
+        "total": 135095480,
+        "wal": 67703992
+      },
+      "beforeImport": {
+        "hwmKiB": 84940,
+        "rssKiB": 84940
+      },
+      "beforeInput": {
+        "hwmKiB": 19204,
+        "rssKiB": 19204
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 3.633909506,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 67112796,
+      "phase": "baseline",
+      "repeat": 3,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 35068,
+        "rssKiB": 21560
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2842624,
+        "total": 2842624,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2978576,
+        "wal": 2941712
+      },
+      "beforeImport": {
+        "hwmKiB": 23092,
+        "rssKiB": 23092
+      },
+      "beforeInput": {
+        "hwmKiB": 19100,
+        "rssKiB": 19100
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.167926502,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 2797402,
+      "phase": "baseline",
+      "repeat": 1,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 35120,
+        "rssKiB": 21612
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2842624,
+        "total": 2842624,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2978576,
+        "wal": 2941712
+      },
+      "beforeImport": {
+        "hwmKiB": 23056,
+        "rssKiB": 23056
+      },
+      "beforeInput": {
+        "hwmKiB": 19096,
+        "rssKiB": 19096
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.168765252,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 2797402,
+      "phase": "baseline",
+      "repeat": 2,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 35108,
+        "rssKiB": 21600
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2842624,
+        "total": 2842624,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2978576,
+        "wal": 2941712
+      },
+      "beforeImport": {
+        "hwmKiB": 23104,
+        "rssKiB": 23104
+      },
+      "beforeInput": {
+        "hwmKiB": 19180,
+        "rssKiB": 19180
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.165649297,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 2797402,
+      "phase": "baseline",
+      "repeat": 3,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 268016,
+        "rssKiB": 22140
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 89616384,
+        "total": 89616384,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 196608,
+        "sqlite": 89616384,
+        "total": 180036904,
+        "wal": 90223912
+      },
+      "beforeImport": {
+        "hwmKiB": 115032,
+        "rssKiB": 115032
+      },
+      "beforeInput": {
+        "hwmKiB": 19280,
+        "rssKiB": 19280
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 5.554323213,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 89482420,
+      "phase": "baseline",
+      "repeat": 1,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 267944,
+        "rssKiB": 22004
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 89616384,
+        "total": 89616384,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 196608,
+        "sqlite": 89616384,
+        "total": 180036904,
+        "wal": 90223912
+      },
+      "beforeImport": {
+        "hwmKiB": 114844,
+        "rssKiB": 114844
+      },
+      "beforeInput": {
+        "hwmKiB": 19028,
+        "rssKiB": 19028
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 5.5074451920000005,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 89482420,
+      "phase": "baseline",
+      "repeat": 2,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 267904,
+        "rssKiB": 22032
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 89616384,
+        "total": 89616384,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 196608,
+        "sqlite": 89616384,
+        "total": 180036904,
+        "wal": 90223912
+      },
+      "beforeImport": {
+        "hwmKiB": 114928,
+        "rssKiB": 114928
+      },
+      "beforeInput": {
+        "hwmKiB": 19112,
+        "rssKiB": 19112
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 5.525033905,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 89482420,
+      "phase": "baseline",
+      "repeat": 3,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 29996,
+        "rssKiB": 21928
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2142208,
+        "total": 2142208,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2274056,
+        "wal": 2237192
+      },
+      "beforeImport": {
+        "hwmKiB": 21832,
+        "rssKiB": 21832
+      },
+      "beforeInput": {
+        "hwmKiB": 19576,
+        "rssKiB": 19576
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.111327885,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 2098348,
+      "phase": "candidate",
+      "repeat": 1,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 29808,
+        "rssKiB": 21740
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2142208,
+        "total": 2142208,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2274056,
+        "wal": 2237192
+      },
+      "beforeImport": {
+        "hwmKiB": 21580,
+        "rssKiB": 21580
+      },
+      "beforeInput": {
+        "hwmKiB": 19260,
+        "rssKiB": 19260
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.114137633,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 2098348,
+      "phase": "candidate",
+      "repeat": 2,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 30028,
+        "rssKiB": 21960
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2142208,
+        "total": 2142208,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2274056,
+        "wal": 2237192
+      },
+      "beforeImport": {
+        "hwmKiB": 21864,
+        "rssKiB": 21864
+      },
+      "beforeInput": {
+        "hwmKiB": 19608,
+        "rssKiB": 19608
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.1194574,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 2098348,
+      "phase": "candidate",
+      "repeat": 3,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 142536,
+        "rssKiB": 22320
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 67227648,
+        "total": 67227648,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 163840,
+        "sqlite": 67227648,
+        "total": 135095480,
+        "wal": 67703992
+      },
+      "beforeImport": {
+        "hwmKiB": 85340,
+        "rssKiB": 85340
+      },
+      "beforeInput": {
+        "hwmKiB": 19540,
+        "rssKiB": 19540
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 3.742393239,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 67112796,
+      "phase": "candidate",
+      "repeat": 1,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 142812,
+        "rssKiB": 22536
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 67227648,
+        "total": 67227648,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 163840,
+        "sqlite": 67227648,
+        "total": 135095480,
+        "wal": 67703992
+      },
+      "beforeImport": {
+        "hwmKiB": 85504,
+        "rssKiB": 85504
+      },
+      "beforeInput": {
+        "hwmKiB": 19708,
+        "rssKiB": 19708
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 3.591938549,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 67112796,
+      "phase": "candidate",
+      "repeat": 2,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 142888,
+        "rssKiB": 20260
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 67227648,
+        "total": 67227648,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 163840,
+        "sqlite": 67227648,
+        "total": 135095480,
+        "wal": 67703992
+      },
+      "beforeImport": {
+        "hwmKiB": 85444,
+        "rssKiB": 85444
+      },
+      "beforeInput": {
+        "hwmKiB": 19704,
+        "rssKiB": 19704
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 3.628211668,
+      "mode": "utf8",
+      "nativeInputSerializedBytes": 67112796,
+      "phase": "candidate",
+      "repeat": 3,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 32560,
+        "rssKiB": 21664
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2842624,
+        "total": 2842624,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2978576,
+        "wal": 2941712
+      },
+      "beforeImport": {
+        "hwmKiB": 23144,
+        "rssKiB": 23144
+      },
+      "beforeInput": {
+        "hwmKiB": 19248,
+        "rssKiB": 19248
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.175679631,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 2797402,
+      "phase": "candidate",
+      "repeat": 1,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 32296,
+        "rssKiB": 21528
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2842624,
+        "total": 2842624,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2978576,
+        "wal": 2941712
+      },
+      "beforeImport": {
+        "hwmKiB": 23100,
+        "rssKiB": 23100
+      },
+      "beforeInput": {
+        "hwmKiB": 19204,
+        "rssKiB": 19204
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.17073344,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 2797402,
+      "phase": "candidate",
+      "repeat": 2,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 32320,
+        "rssKiB": 21552
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 2842624,
+        "total": 2842624,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 32768,
+        "sqlite": 4096,
+        "total": 2978576,
+        "wal": 2941712
+      },
+      "beforeImport": {
+        "hwmKiB": 23096,
+        "rssKiB": 23096
+      },
+      "beforeInput": {
+        "hwmKiB": 19136,
+        "rssKiB": 19136
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 1048576,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 2097152,
+      "exchanges": 1,
+      "importSeconds": 0.170441706,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 2797402,
+      "phase": "candidate",
+      "repeat": 3,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 180544,
+        "rssKiB": 22028
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 89616384,
+        "total": 89616384,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 196608,
+        "sqlite": 89616384,
+        "total": 180036904,
+        "wal": 90223912
+      },
+      "beforeImport": {
+        "hwmKiB": 114996,
+        "rssKiB": 114996
+      },
+      "beforeInput": {
+        "hwmKiB": 19244,
+        "rssKiB": 19244
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 5.356998953,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 89482420,
+      "phase": "candidate",
+      "repeat": 1,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 180600,
+        "rssKiB": 22104
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 89616384,
+        "total": 89616384,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 196608,
+        "sqlite": 89616384,
+        "total": 180036904,
+        "wal": 90223912
+      },
+      "beforeImport": {
+        "hwmKiB": 115052,
+        "rssKiB": 115052
+      },
+      "beforeInput": {
+        "hwmKiB": 19236,
+        "rssKiB": 19236
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 5.306684957,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 89482420,
+      "phase": "candidate",
+      "repeat": 2,
+      "schemaVersion": 1
+    },
+    {
+      "afterImport": {
+        "hwmKiB": 180552,
+        "rssKiB": 22104
+      },
+      "archiveAfterClose": {
+        "shm": 0,
+        "sqlite": 89616384,
+        "total": 89616384,
+        "wal": 0
+      },
+      "archiveAfterImport": {
+        "shm": 196608,
+        "sqlite": 89616384,
+        "total": 180036904,
+        "wal": 90223912
+      },
+      "beforeImport": {
+        "hwmKiB": 115004,
+        "rssKiB": 115004
+      },
+      "beforeInput": {
+        "hwmKiB": 19252,
+        "rssKiB": 19252
+      },
+      "bodiesPerExchange": 2,
+      "bytesPerBody": 8388608,
+      "controls": {
+        "completion": true,
+        "identities": true,
+        "metadata": true,
+        "originals": true,
+        "pairing": true,
+        "rawBytes": true,
+        "reopen": true,
+        "repeatedHeaderOrder": true,
+        "tempArchiveRemoved": true
+      },
+      "decodedBodyBytes": 67108864,
+      "exchanges": 4,
+      "importSeconds": 5.460381786,
+      "mode": "binary",
+      "nativeInputSerializedBytes": 89482420,
+      "phase": "candidate",
+      "repeat": 3,
+      "schemaVersion": 1
+    }
+  ],
+  "cargoLockSha256": "5cdf6aa894c594d975d2478a05f06de57a22899be090f9ea229322ad5b333ee0"
+}
