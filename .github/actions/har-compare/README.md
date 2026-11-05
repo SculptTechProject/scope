@@ -182,6 +182,16 @@ workspace, exercise the status/output contract, and check literal hostile paths,
 label minimization, safe errors and stale-directory refusal. These are local
 subprocess checks; they do not claim a hosted GitHub runner execution.
 
+The [`HAR composite Action` workflow](../../workflows/har-compare-action.yml)
+also invokes the actual composite on Linux for clean, regression and invalid
+synthetic captures. It checks default and deferred caller outcomes, all eight
+outputs, report minimization and isolation from a spoofed consumer CLI, using an
+Action checkout path with spaces. It has read-only repository access and uploads
+no artifacts. Both HAR workflows include Action files in their path filters, so
+an Action-only edit runs the relevant checks. A green hosted run validates that
+local composite invocation; remote `owner/repo/path@ref` resolution and other
+runner operating systems remain separate validation targets.
+
 Metadata and output-file behavior follow GitHub's
 [composite metadata reference](https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax)
 and [workflow command reference](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands).

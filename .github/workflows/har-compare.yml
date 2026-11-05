@@ -3,10 +3,12 @@ name: HAR comparison
 on:
   pull_request:
     paths:
+      - '.github/actions/har-compare/**'
       - 'tools/har-compare/**'
       - '.github/workflows/har-compare.yml'
   push:
     paths:
+      - '.github/actions/har-compare/**'
       - 'tools/har-compare/**'
       - '.github/workflows/har-compare.yml'
 
