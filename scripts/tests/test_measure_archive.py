@@ -110,6 +110,9 @@ class MeasurementRunnerTests(unittest.TestCase):
             uncertain = {'status':'TIMEOUT', 'returncode':-9, 'output':'', 'cleanup_uncertain':True}
             with patch.object(sys, 'argv', args), patch.dict(measure.os.environ, {}, clear=True), \
                     patch.object(measure.subprocess, 'check_output', side_effect=['a'*40, b'', 'rustc 1.99.1 (abcdef 2026-10-01)']), \
+                    patch.object(measure.platform, 'system', return_value='SyntheticOS'), \
+                    patch.object(measure.platform, 'machine', return_value='synthetic-arch'), \
+                    patch.object(measure.platform, 'python_version', return_value='3.12.10'), \
                     patch.object(measure, 'resource_limits', return_value={}), \
                     patch.object(measure, 'run_bounded', return_value=uncertain) as launch:
                 self.assertEqual(measure.main(), 1)
