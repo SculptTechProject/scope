@@ -157,6 +157,16 @@ impl Probes {
             }
             values
         });
+        // Arm only after the independent network probe is ready. Otherwise
+        // readiness polling (notably Windows timer granularity) can leave an
+        // already-overdue first deadline outside the upcoming control window.
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while !ready.load(Ordering::SeqCst) {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("loopback probe readiness failed");
         let (timer_stop, timer_active) = (stop.clone(), active.clone());
         let (tx, rx) = tokio::sync::oneshot::channel();
         let timer = tokio::spawn(async move {
@@ -188,13 +198,6 @@ impl Probes {
             values
         });
         rx.await.unwrap();
-        tokio::time::timeout(Duration::from_secs(3), async {
-            while !ready.load(Ordering::SeqCst) {
-                tokio::time::sleep(Duration::from_millis(1)).await;
-            }
-        })
-        .await
-        .expect("loopback probe readiness failed");
         active.store(true, Ordering::SeqCst);
         Self {
             epoch,

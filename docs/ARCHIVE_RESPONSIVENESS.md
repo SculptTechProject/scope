@@ -94,12 +94,30 @@ if they were matched experiments.
 
 ## Result provenance
 
-Hosted Linux: **NOT RUN** (awaiting reviewed dispatch).
-Hosted Windows: **NOT RUN** (awaiting reviewed dispatch).
+The first complete [measurement run 42292352293](https://github.com/dalkedev/scope/actions/runs/42292352293)
+at `04c78d202d61689a4c9444da120c375e0818a4fb` passed Linux. Windows passed all
+24 workload batches (32 correct clients/rows and 192 successful saves/revision
+increments each), but its debug and release current-thread blocking controls
+failed. This is a **FAIL of harness validation**, not archive evidence loss.
+
+Windows network readiness took approximately 24–26ms; the timer had already been
+armed with its first deadline at approximately 11ms. After the intentional 300ms
+block, that overdue deadline correctly fell outside the control window. The
+network detector observed the block, while timer coverage was NOT RUN. The
+[bounded numeric regression receipt](benchmarks/archive-control-startup-2026-11-06.json)
+retains source/run/artifact provenance and both failed controls. No raw job logs,
+archive rows or host identities are included.
+
+The harness now waits for independent network readiness **before** arming the
+heartbeat. Window filtering, thresholds, workload and production behavior remain
+unchanged. This fixes the observed readiness race; it does not promise
+deterministic OS scheduling. Corrected-source hosted Linux/Windows validation is
+**NOT RUN** until the next reviewed dispatch completes; the final result dataset
+will be recorded here before this PR is ready.
+
 Local debug smoke: all four HTTP/TLS × current-thread/two-worker batches passed
-with one sample per case, including both detector controls. This is a harness
-smoke check, not comparative performance evidence. Hosted result artifacts and
-exact source/run provenance will replace the pending entries before delivery.
+with one sample per case, including the blocking and persisted-evidence controls.
+This is a harness smoke check, not comparative performance evidence.
 
 GUI/Android, real captures, external endpoints, sustained/large-body workloads,
 fsync counts, isolated storage latency and production performance: **NOT RUN**.
