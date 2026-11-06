@@ -3572,7 +3572,7 @@ dependencies = [
 
 [[package]]
 name = "scope-core"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3595,7 +3595,7 @@ dependencies = [
 
 [[package]]
 name = "scope-desktop"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -3614,7 +3614,7 @@ dependencies = [
 
 [[package]]
 name = "scope-device"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "md-5",
@@ -3635,7 +3635,7 @@ dependencies = [
 
 [[package]]
 name = "scope-mcp"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "directories",
