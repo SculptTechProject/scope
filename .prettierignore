@@ -5,3 +5,4 @@ resources
 src-tauri
 Cargo.lock
 package-lock.json
+vendor

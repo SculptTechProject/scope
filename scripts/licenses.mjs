@@ -21,6 +21,50 @@ const result = spawnSync(
 if (result.status !== 0)
   throw new Error(result.stderr || result.error?.message || 'cargo-about failed');
 const rust = JSON.parse(result.stdout);
+// A path source can be a workspace crate or vendored third-party code. Cargo's
+// workspace membership, rather than the absence of a registry source, decides.
+const metadataResult = spawnSync(
+  process.env.CARGO || 'cargo',
+  ['metadata', '--no-deps', '--format-version', '1', '--locked'],
+  { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+);
+if (metadataResult.status !== 0)
+  throw new Error(
+    metadataResult.stderr || metadataResult.error?.message || 'cargo metadata failed',
+  );
+const workspaceMembers = new Set(JSON.parse(metadataResult.stdout).workspace_members);
+const scopeRepository = 'https://github.com/dalkedev/scope';
+function rustPackageNotice(p) {
+  const notice = {
+    name: p.name,
+    version: p.version,
+    license: p.license,
+    repository: p.repository,
+    authors: p.authors,
+  };
+  if (p.source) {
+    notice.source =
+      p.source.startsWith('registry+') || p.source.startsWith('sparse+')
+        ? `https://crates.io/crates/${p.name}/${p.version}`
+        : p.repository;
+  } else if (workspaceMembers.has(p.id)) {
+    notice.source = scopeRepository;
+  } else if (
+    p.name === 'glib' &&
+    p.version === '0.18.5' &&
+    resolve(p.manifest_path) === join(root, 'vendor/glib/Cargo.toml') &&
+    p.repository === 'https://github.com/gtk-rs/gtk-rs-core'
+  ) {
+    notice.source = `${scopeRepository}/tree/main/vendor/glib`;
+    notice.upstreamSource = 'https://crates.io/crates/glib/0.18.5';
+    notice.provenance = `${scopeRepository}/blob/main/vendor/glib-provenance/README.md`;
+  } else {
+    notice.source = p.repository;
+  }
+  if (!/^https?:\/\//.test(notice.source ?? ''))
+    throw new Error(`No public source attribution for ${p.name} ${p.version}`);
+  return notice;
+}
 const rustNotices = {
   generator: 'cargo-about 0.9.3; scripts/licenses.mjs',
   lockfileSha256: digest('Cargo.lock'),
@@ -30,16 +74,7 @@ const rustNotices = {
     id: license.id,
     name: license.name,
     text: license.text,
-    packages: license.used_by.map(({ crate: p }) => ({
-      name: p.name,
-      version: p.version,
-      license: p.license,
-      repository: p.repository,
-      authors: p.authors,
-      source: p.source
-        ? `https://crates.io/crates/${p.name}/${p.version}`
-        : 'https://github.com/SculptTechProject/scope',
-    })),
+    packages: license.used_by.map(({ crate: p }) => rustPackageNotice(p)),
   })),
 };
 
@@ -97,7 +132,7 @@ const escape = (text) =>
   );
 const sections = rustNotices.licenses.map(
   (license) =>
-    `<section><h2>${escape(license.name)} (${escape(license.id)})</h2><p>${license.packages.map((p) => `${escape(p.name)} ${escape(p.version)}`).join(', ')}</p><pre>${escape(license.text)}</pre></section>`,
+    `<section><h2>${escape(license.name)} (${escape(license.id)})</h2><p>${license.packages.map((p) => `${escape(p.name)} ${escape(p.version)}${p.provenance ? ` (<a href="${escape(p.upstreamSource)}">upstream</a>; <a href="${escape(p.source)}">vendored source</a>; <a href="${escape(p.provenance)}">Scope backport provenance</a>)` : ''}`).join(', ')}</p><pre>${escape(license.text)}</pre></section>`,
 );
 for (const p of frontendNotices.packages)
   sections.push(

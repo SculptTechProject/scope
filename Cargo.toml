@@ -1,6 +1,10 @@
 [workspace]
-members = ["crates/scope-core", "crates/scope-mcp", "crates/scope-device", "src-tauri"]
+members = ["crates/scope-core", "crates/scope-mcp", "crates/scope-device", "crates/glib-variant-regression", "src-tauri"]
+exclude = ["vendor/glib"]
 resolver = "2"
+
+[patch.crates-io]
+glib = { path = "vendor/glib" }
 
 [workspace.package]
 version = "1.2.1"

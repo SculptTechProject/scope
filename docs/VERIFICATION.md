@@ -1,5 +1,57 @@
 # Recorded verification
 
+## GLib 0.18.5 backport — 2026-11-06
+
+This narrow change is based on Scope 1.2.1 (`98ba0ef`) and preserves the
+GTK 0.18 dependency family. [Backport provenance](../vendor/glib-provenance/README.md)
+describes the exact upstream fix, checksum verification and removal conditions.
+No application version or unrelated dependency version changes are included.
+
+Local checks used Linux x86-64, Rust 1.99.1, Node 22.22.3 and the existing Zig
+C compiler/linker. The iterator tests linked the actual installed GLib/GObject/GIO
+2.88 runtime through local library search settings; no system packages were installed.
+
+| Status | Check | Result / boundary |
+| --- | --- | --- |
+| PASS | `python3 scripts/verify-glib-backport.py --check-selection` | All 121 upstream crate files equal the verified original archive plus exact upstream patch; locked Cargo metadata selects only local GLib 0.18.5 at `vendor/glib`. |
+| PASS | `python3 -m unittest discover -s scripts/tests` | 15 integrity/selection cases, including tampered inputs/source/licenses and registry/wrong-path/unused selection rejection. |
+| PASS | `cargo test --locked --release -p scope-glib-variant-regression` | 9 optimized iterator tests. Seven independent content-reading cases segfaulted with pristine 0.18.5; all nine pass with the backport. |
+| PASS | `cargo test --workspace --exclude scope-desktop --locked` | 74 tests: 40 core, 23 device fixtures, 2 MCP and 9 GLib iterator regressions. Real local HTTP/TLS tests and fake ADB are not interactive GUI/device acceptance. |
+| PASS | `cargo fmt --all -- --check` | Vendored GLib remains excluded; original source bytes are preserved. |
+| PASS | `npm test -- --run`; `npm run build` | 15 frontend tests and TypeScript/Vite production build. |
+| PASS | `node --test scripts/licenses.test.mjs scripts/release.test.mjs` | 6 attribution tests and 3 release/resource tests. |
+| PASS | `python3 -m unittest discover -s resources/device/tests` | 3 installer tests. |
+| PASS | `npm test --prefix tools/har-compare` | 205 HAR tests. Contract lab also passed after its separate locked dependencies were installed. |
+| PASS | `npm audit --audit-level=high` | Zero reported npm vulnerabilities. |
+| PASS | Public resource staging/verification | 67 filtered files including the newly built MCP helper. |
+| FAIL (environment) | `cargo test --workspace --locked` | `gdk-sys` cannot run `pkg-config` for `gdk-3.0 >= 3.22`; GTK development prerequisites are unavailable on this host. |
+| FAIL (environment) | `npm run package` | Optimized locked `scope-mcp` build and frontend build pass; Tauri packaging fails at `glib-sys` because `pkg-config` / native desktop development metadata is missing. No installer produced. |
+| NOT RUN | `node scripts/smoke.mjs` | Requires the desktop binary that this host cannot build; existing core/MCP tests are separate evidence. |
+| NOT RUN | Interactive GTK/dialogs, installer launch, Android/device and other architectures | Headless/iterator tests do not establish these acceptance criteria. Issue #11 must remain open. |
+
+The first local headless compile needed the existing Zig `CC`/`AR` selectors;
+with those configured the complete available suite passed. Initial npm installation
+used an unwritable default cache; rerunning with a local cache passed. An initial
+contract-lab invocation lacked its separately locked XML dependency; after its
+locked install the checks passed. These were environment/setup failures, not
+suppressed test failures. Existing upstream GLib warnings are preserved.
+
+The established `cargo-about` 0.9.3 generator regenerated 226 Rust license sections
+and seven npm runtime notices. All original license texts are byte-identical; GLib
+retains gtk-rs attribution and links the upstream crate and backport provenance.
+Both recorded lockfile hashes match and the generated files contain no local paths.
+
+Current `cargo audit` 0.22.2 returned exit 0 against database commit
+`309392b18f6b17022f82c701f300433126901068`: zero vulnerability-list entries and
+three unmaintained findings (`pin-utils`, `proc-macro-error`, `rustls-pemfile`).
+Local path GLib is excluded by this tool's registry-source filter; its absence
+is not security verification. See [DEPENDENCIES.md](DEPENDENCIES.md) for advisory
+IDs and the backport's independent source/test evidence. No ignores are configured.
+
+A fresh independent whole-change review found no substantive issues. Hosted
+three-platform checks remain separate evidence; local results are not a claim
+that hosted CI passed.
+
 ## 1.2.1 maintenance preparation — 2026-11-06
 
 This candidate updates the macOS CI and release build host from `macos-14` to
