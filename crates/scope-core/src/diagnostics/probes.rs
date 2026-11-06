@@ -355,7 +355,8 @@ fn draining_real_probes_does_not_turn_an_empty_window_into_coverage() {
         let report = probes.finish(boundary, boundary).await;
         assert!(report.covered());
         assert!(!report.timer.samples.is_empty());
-        assert!(!report.network.samples.is_empty());
+        // The warmup echo establishes readiness. A zero-width workload need
+        // not schedule another OS-thread attempt during drain; empty is valid.
         assert_eq!(report.timer.in_window_samples, 0);
         assert_eq!(report.network.in_window_samples, 0);
         assert_eq!(report.timer.window_status, "NOTRUN");

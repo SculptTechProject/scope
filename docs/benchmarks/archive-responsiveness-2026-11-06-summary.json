@@ -1333,5 +1333,16 @@
       "artifact_id": 13541022569,
       "artifact_zip_sha256": "e0b2f3c65fd43e4fe179258d6a6dfd76a863c8c80059467f061e8ee3239c125d"
     }
-  ]
+  ],
+  "postmeasurement_test_only_change": {
+    "file": "crates/scope-core/src/diagnostics/probes.rs",
+    "test": "draining_real_probes_does_not_turn_an_empty_window_into_coverage",
+    "reason": "Remove an incidental nonempty network-sample assumption for a zero-width window; retain all window, NOTRUN and false-control assertions.",
+    "failure_commit": "1f6c8dd9462fe7633a9c3039b6a906ced96cbdcb",
+    "failure_job_url": "https://github.com/dalkedev/scope/actions/runs/42295532143/job/128159662751",
+    "unchanged_runtime_prefix": {
+      "definition": "UTF-8 file bytes before the first literal newline + #[test] + newline; separator and subsequent test functions excluded.",
+      "sha256": "bacc8d874415564f56f69356c100d3ede403486d56b9e9bec80086b9a0874802"
+    }
+  }
 }

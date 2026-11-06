@@ -135,8 +135,13 @@ artifact digests before extracting the sole allowlisted `measurement.json` file.
 The summary records artifact IDs/digests and raw JSON SHA-256 values. All runtime
 reports passed the strict schema validator, source/clean-tree/run/attempt/sample
 identity checks and exact evidence counts. Independent review recalculated all
-16 groups and every displayed table cell. The final PR may add documentation;
-its measurement-source hashes must continue to match this measured commit.
+16 groups and every displayed table cell. Recorded whole-file hashes identify
+the measured commit. Subsequent changes add documentation/results and correct
+one ordinary-CI assertion in the probe regression tests, described below. All
+other recorded source files match; the probe runtime implementation is byte-
+identical before its first `#[test]` function. The summary defines that UTF-8
+prefix boundary precisely and records its verified SHA-256. No timing logic,
+threshold, window filter or workload changed after the measured commit.
 
 ### Descriptive timings (milliseconds)
 
@@ -211,6 +216,22 @@ This is a harness smoke check, not comparative performance evidence.
 
 GUI/Android, real captures, external endpoints, sustained/large-body workloads,
 fsync counts, isolated storage latency and production performance: **NOT RUN**.
+
+## Zero-width regression test correction
+
+The [macOS job on the first results commit](https://github.com/dalkedev/scope/actions/runs/42295532143/job/128159662751)
+failed only `draining_real_probes_does_not_turn_an_empty_window_into_coverage`:
+its assertion required an active network sample during approximately 20ms of
+drain even though the workload window has zero width. `Probes::start` already
+proves a successful warmup echo. The OS thread may observe the stop flag before
+its next active attempt, so an empty collector is valid and must remain NOT RUN.
+
+Only that incidental nonempty-network assertion was removed. Real socket
+readiness, timer observation, both zero in-window counts, both NOTRUN states and
+false-control rejection remain checked. Deterministic interval/empty-collector
+regressions and the four hosted blocking controls remain unchanged. This is a
+normal-CI test correction, not a measurement change or timeout increase. The
+summary preserves the failed commit/job and the unchanged-runtime-prefix proof.
 
 ## Bounded writer proposal (not implemented)
 
