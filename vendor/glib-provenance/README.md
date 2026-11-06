@@ -49,6 +49,9 @@ Git settings request CRLF conversion; they never rewrite the user's configuratio
 The Python regression suite injects such a temporary global config and runs in the
 normal Linux, macOS and Windows CI matrix. No checksums or source comparisons are
 relaxed or normalized.
+Cargo's JSON metadata is explicitly decoded as UTF-8, independent of the host's
+default codepage. A separate regression exercises the real Cargo process under
+a forced CP1252 default when Cargo is available (as it is in normal CI).
 
 The second command additionally runs `cargo metadata --locked` and requires one
 local GLib 0.18.5 package at `vendor/glib/Cargo.toml`, used by the resolved graph

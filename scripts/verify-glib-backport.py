@@ -110,7 +110,7 @@ def main():
     count = verify_tree(root)
     if args.check_selection:
         result = subprocess.run(['cargo', 'metadata', '--locked', '--format-version', '1'],
-                                cwd=root, check=True, capture_output=True, text=True)
+                                cwd=root, check=True, capture_output=True, encoding='utf-8')
         verify_selection(root, json.loads(result.stdout))
     print(f'GLib 0.18.5 backport verified: {count} files, original archive + exact upstream patch'
           + (', locked Cargo selection' if args.check_selection else ''))

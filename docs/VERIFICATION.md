@@ -17,12 +17,21 @@ or byte comparisons. The regression verifies successful replay and that the
 injected global config is unchanged. It runs in the existing three-platform CI
 matrix, alongside the full tamper/selection suite.
 
+The first follow-up head, `eec083e`, passed replay and exposed a second Windows
+issue in [job 128100947923](https://github.com/dalkedev/scope/actions/runs/42278486459/job/128100947923):
+Python tried to decode Cargo's UTF-8 metadata with CP1252. An actual locked Cargo
+process reproduced `UnicodeDecodeError` locally when only the parent's default
+encoding was forced to CP1252. Metadata capture now explicitly decodes UTF-8,
+without changing JSON/source bytes. The additional regression uses the real
+Cargo process and is skipped only if Cargo is not installed; normal platform CI
+provides Cargo. Its RED/GREEN cycle is separate from the Git newline regression.
+
 Current local follow-up checks:
 
 | Status | Check | Result |
 | --- | --- | --- |
 | EXPECTED FAIL then PASS | Hostile inherited Git config regression | Original replay reproduces the exact checksum mismatch; command-local settings fix it. |
-| PASS | Python integrity/selection tests | 16 cases, including unchanged user config and all previous tamper checks. |
+| PASS | Python integrity/selection tests | 17 cases, including inherited CRLF, legacy-codepage metadata, unchanged user config and previous tamper checks. |
 | PASS | Full-tree provenance and locked Cargo selection | All 121 original files plus the exact upstream backport; same real version and lockfile. |
 | PASS | Linux optimized GLib regression crate | 24 cases: nine iterator regressions plus two logging, nine translation and four ownership checks. |
 | PASS | Locked workspace excluding desktop | 89 tests: 40 core, 23 device, 2 MCP and 24 GLib cases. |

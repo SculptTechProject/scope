@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -101,6 +102,14 @@ class CargoSelection(unittest.TestCase):
             'packages': [self.package], 'workspace_members': [],
             'resolve': {'nodes': [{'dependencies': [self.package['id']]}]},
         }
+
+    @unittest.skipUnless(shutil.which('cargo'), 'Cargo is required for metadata encoding regression')
+    def test_metadata_is_decoded_as_utf8_even_under_a_windows_legacy_codepage(self):
+        # Keep the real Cargo process/locked graph, changing only the parent's
+        # default text encoding to reproduce Windows CP1252 on every CI host.
+        with mock.patch('locale.getencoding', return_value='cp1252'):
+            with mock.patch.object(sys, 'argv', ['verify-glib-backport.py', '--check-selection']):
+                self.module.main()
 
     def test_used_local_backport_is_accepted(self):
         self.module.verify_selection(ROOT, self.metadata)
