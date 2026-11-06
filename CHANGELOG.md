@@ -4,6 +4,20 @@ User-visible changes are recorded here. Back up important captures before upgrad
 
 ## Unreleased
 
+## 1.2.2 — 2026-11-06
+
+- Backport the upstream GLib `VariantStrIter` soundness fix to the compatible
+  Linux GTK 0.18 dependency family. Retain the real 0.18.5 version, original
+  license, pristine source archive and exact upstream patch.
+- Verify every vendored file and Cargo's locked selection before checks and
+  release builds. Optimized Linux regressions exercise the affected iterators;
+  verification preserves exact bytes with Windows Git settings and decodes
+  Cargo metadata explicitly as UTF-8.
+- Preserve upstream and modified-source attribution in redistributed notices.
+  Record individual CodeQL flow reviews and concrete ownership/conversion tests
+  while retaining code scanning. Interactive GTK/dialog and device acceptance
+  remains open in #11.
+
 ## 1.2.1 — 2026-11-06
 
 - Move macOS CI and release packaging to the supported macOS 15 arm64 runner.

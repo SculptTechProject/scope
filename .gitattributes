@@ -13,3 +13,9 @@
 # Preserve upstream license files and binary assets exactly as supplied.
 resources/device/licenses/** -text
 resources/frida/licenses/** -text
+
+# The backport verifier compares every vendored byte to the original archive.
+vendor/** -text
+# Retain original upstream license/patch whitespace without rewriting it.
+vendor/glib/** -whitespace
+vendor/glib-provenance/*.patch -whitespace

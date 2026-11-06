@@ -1,16 +1,29 @@
 # Dependency checks
 
-Recorded on 2026-11-02 against the committed `Cargo.lock` and `package-lock.json`.
+Current backport checks recorded on **2026-11-06** against the committed lockfiles.
+`cargo audit` 0.22.2 checked 543 dependencies against 1,422 advisories at RustSec
+database commit `309392b18f6b17022f82c701f300433126901068`.
+It returned exit 0 with zero vulnerability-list entries and the three unmaintained
+warnings below, without ignores or target filters. A successful command does not
+mean there are no findings.
 
 - `npm audit`: zero reported vulnerabilities, including development dependencies.
-- `cargo audit` 0.22.2: zero entries in its vulnerability list, with the informational findings below. A successful command does not mean there are no findings.
-- Gitleaks 8.30.1: the initial committed history contained no detected secrets. Public release preparation is scanned again before upload. Detection is heuristic.
+- GLib's path dependency is **excluded from cargo-audit's registry advisory matching**
+  (rustsec 0.33.0 filters packages without a default-registry source). Its absence
+  from the report is not a validation of this backport. The real version stays
+  0.18.5; source integrity, locked-selection checks and optimized red/green
+  regressions provide the backport evidence. Other version-based scanners may
+  still report RUSTSEC-2024-0429. The same tool/database against the original
+  registry lockfile does report GLib's unsoundness, alongside the same three
+  unmaintained warnings.
+- Historical baseline (2026-11-02): Gitleaks 8.30.1 found no detected secrets in the initial committed history. No fresh Gitleaks run is claimed for this backport.
 
-## Rust informational findings
+## Tracked Rust findings
 
 | Package                  | Advisory                                                                                              | Status                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------------ | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `glib` 0.18.5            | [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html) — unsound `VariantStrIter` | Pulled by Tauri's GTK/WebKit dependencies on Linux. The upstream fix is in glib 0.20; replacing it alone is incompatible with the GTK 0.18 dependency family. Linux is experimental: its package has CI build/headless-protocol coverage, but interactive installer and desktop/device behavior remain unverified. No claim is made that the affected function is unreachable on Linux. This dependency is absent from the macOS runtime graph. |
+| `glib` 0.18.5            | [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html) — unsound `VariantStrIter` | The Linux GTK/WebKit graph now selects a local 0.18.5 backport containing only upstream b5a4071 (PR 1343). Original archive, notices, exact patch and full-tree integrity checks are retained; see [provenance](../vendor/glib-provenance/README.md). Optimized Linux iterator regression has actual pristine SIGSEGV / patched PASS evidence. The real version remains 0.18.5; version-based scanners may still report this advisory. Interactive GTK/dialog and installer/device acceptance remains unverified; keep #11 open. This runtime dependency is absent from the macOS graph. |
+| `pin-utils` 0.1.1 | [RUSTSEC-2026-0441](https://rustsec.org/advisories/RUSTSEC-2026-0441.html) — unmaintained | Newly reported transitive dependency warning. Upstream is archived; track removal/migration by its consumers. No unrelated graph upgrade is included in this backport. |
 | `proc-macro-error` 1.0.4 | [RUSTSEC-2024-0370](https://rustsec.org/advisories/RUSTSEC-2024-0370.html) — unmaintained             | Transitive procedural macro dependency. Track upstream migration.                                                                                                                                                                                                                                                                                                                                                                               |
 | `rustls-pemfile` 2.2.0   | [RUSTSEC-2025-0134](https://rustsec.org/advisories/RUSTSEC-2025-0134.html) — unmaintained             | Transitive dependency; upstream recommends the equivalent PEM APIs in rustls-pki-types. Track upstream migration.                                                                                                                                                                                                                                                                                                                               |
 

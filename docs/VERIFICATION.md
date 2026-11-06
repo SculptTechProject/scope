@@ -1,5 +1,176 @@
 # Recorded verification
 
+## Concurrent rule fixture follow-up — 2026-11-06
+
+At `2ada212`, the [Windows job](https://github.com/dalkedev/scope/actions/runs/42281855023/job/128112730439)
+passed GLib integrity and all eight attribution tests, then the combined
+rule-ordering/concurrency fixture reported 29 of 32 client request timeouts.
+Its shared helper specified five seconds; the failed rules binary completed in
+15.15 seconds. This is observed test evidence, not measured per-request disk
+latency. The original combined test passed locally before this change.
+
+Source inspection shows six synchronous, mutex-held SQLite saves per successful
+mock exchange: 192 autocommit statements for the 32-client burst. On the default
+current-thread Tokio runtime these can delay network/timer progress. This is a
+plausible causal explanation, not proof of Windows storage latency or a GLib
+regression. Production persistence, SQLite settings and runtime timeouts are unchanged.
+
+The fixture now separates `rules_run_before_breakpoints` (one exact exchange,
+original/manual snapshots, response status/body and three-rule evidence) from
+`concurrent_mock_requests_keep_all_evidence` (32 clients and 32 unique complete
+mock exchanges, exact status/body and rule evidence). General clients retain
+five seconds; only the stress client uses 30 seconds with a 60-second cooperative
+batch deadline. Every spawned client is joined, including errors/panics. On a
+batch timeout remaining tasks are explicitly aborted and joined, then the whole
+test fails with elapsed/completed/joined/success counts. Synchronous work can
+delay observing a Tokio timer; this is not a hard wall-clock guarantee for a
+blocked disk. Clients are never retried or silently dropped.
+
+Local checks: all ten real rule tests pass, including 32/32 successful joined
+clients. Private controlled one-nanosecond client and batch budget probes both
+fail as intended while joining 32/32 tasks; normal source was restored exactly.
+These probes validate harness failure/cleanup paths, not Windows latency or a
+reproduction of its filesystem conditions. The full locked headless workspace
+suite passes 90 tests (41 core, 23 device, two MCP and 24 GLib). Formatting and
+exact vendor/lockfile/notice preservation checks pass.
+
+[Issue #28](https://github.com/dalkedev/scope/issues/28) records the separate
+archive-writer responsiveness investigation, measured Windows/Linux acceptance
+criteria and links to body-storage/backpressure work in #12. No production writer
+redesign or performance improvement is claimed by this test-only maintenance fix.
+New-head hosted Windows results remain separate PR check evidence; interactive
+GTK/dialog acceptance is still outside these tests and #11 remains open.
+
+## License attribution path follow-up — 2026-11-06
+
+The GLib backport attribution now compares real filesystem manifest paths.
+The previous lexical comparison lost the backport/provenance links when macOS
+resolved a temporary-directory alias differently from Cargo's manifest path.
+A real directory alias reproduced the loss locally before the fix; a missing
+manifest also incorrectly claimed the backport. Both regressions now pass,
+without modifying vendored source, copyright/license text or dependency versions.
+
+Fixtures create existing manifest files and execute the real notice generator
+in a child Node process. Only Cargo discovery data is stubbed using a test-only
+Node preload, so the same tests run on Linux, macOS and Windows without Unix
+shebang or Windows shell wrappers. The normal checks and release-build matrix
+now run attribution regressions on all three platforms. Missing files return a
+non-match; other filesystem errors remain visible instead of silently claiming
+that source is verified.
+
+Local Node 22.22.3: eight attribution tests and three release/resource tests pass;
+TypeScript/Vite production build and public-resource verification pass. Actual
+cargo-about 0.9.3 regeneration produces 226 Rust sections and seven npm notices,
+byte-identical to the previous committed JSON/HTML. The unchanged lockfile hashes
+match both generated inventories:
+
+| Lockfile | SHA-256 |
+| --- | --- |
+| `Cargo.lock` | `6b8d93fb0ae484a4fbd6093f0055a7653881ed2a393076fed34b0905fcaa0479` |
+| `package-lock.json` | `c5ffec0b4bcf200ad40550cfe7796c4f402b98ed5a7aaf59ee8183436e2fd07b` |
+
+GLib retains its gtk-rs repository/authors plus upstream crate, modified-source
+and provenance links. All 121 vendored files still pass the exact archive+patch
+verifier and locked Cargo selection. A fresh independent review found no
+production issue; its minor Windows JSON-escaping assertion gap was corrected.
+Hosted platform attribution results are separate PR check evidence.
+
+## GLib hosted acceptance follow-up — 2026-11-06
+
+At `0799385`, [hosted run 42269942248](https://github.com/dalkedev/scope/actions/runs/42269942248)
+passed Linux and macOS workspace/frontend/package/desktop-engine/MCP checks.
+Windows failed in the integrity verifier with `Patched VariantStrIter source
+checksum mismatch`, before its remaining tests could run. Those successful
+platform results supersede the earlier local-host native prerequisite limit
+for those hosted platforms; they do not prove interactive GTK/dialog acceptance.
+
+The replay runs outside the repository's `.gitattributes`. An isolated inherited
+global config with `core.autocrlf=true` and `core.eol=crlf` reproduced the same
+checksum failure on Linux. The fix pins `core.autocrlf=false` and `core.eol=lf`
+only on the replay command, without changing global config, vendor bytes, hashes
+or byte comparisons. The regression verifies successful replay and that the
+injected global config is unchanged. It runs in the existing three-platform CI
+matrix, alongside the full tamper/selection suite.
+
+The first follow-up head, `eec083e`, passed replay and exposed a second Windows
+issue in [job 128100947923](https://github.com/dalkedev/scope/actions/runs/42278486459/job/128100947923):
+Python tried to decode Cargo's UTF-8 metadata with CP1252. An actual locked Cargo
+process reproduced `UnicodeDecodeError` locally when only the parent's default
+encoding was forced to CP1252. Metadata capture now explicitly decodes UTF-8,
+without changing JSON/source bytes. The additional regression uses the real
+Cargo process and is skipped only if Cargo is not installed; normal platform CI
+provides Cargo. Its RED/GREEN cycle is separate from the Git newline regression.
+
+Current local follow-up checks:
+
+| Status | Check | Result |
+| --- | --- | --- |
+| EXPECTED FAIL then PASS | Hostile inherited Git config regression | Original replay reproduces the exact checksum mismatch; command-local settings fix it. |
+| PASS | Python integrity/selection tests | 17 cases, including inherited CRLF, legacy-codepage metadata, unchanged user config and previous tamper checks. |
+| PASS | Full-tree provenance and locked Cargo selection | All 121 original files plus the exact upstream backport; same real version and lockfile. |
+| PASS | Linux optimized GLib regression crate | 24 cases: nine iterator regressions plus two logging, nine translation and four ownership checks. |
+| PASS | Locked workspace excluding desktop | 89 tests: 40 core, 23 device, 2 MCP and 24 GLib cases. |
+
+The [CodeQL triage record](security/glib-0.18.5-codeql-triage.md) identifies all seven
+exact baseline alerts, proposes dispositions with source/type/FFI/lifetime
+reasoning, and documents concrete tests and their limits. The tests characterize
+existing behavior; no pointer/logging production fix or vendor change is claimed.
+All alert decisions remain with the independent operator. New-head hosted results
+are separate PR check evidence and must not be inferred from the old-head passes.
+Interactive GTK/dialog/installer/device acceptance remains untested; keep #11 open.
+
+## GLib 0.18.5 backport — 2026-11-06
+
+This narrow change is based on Scope 1.2.1 (`98ba0ef`) and preserves the
+GTK 0.18 dependency family. [Backport provenance](../vendor/glib-provenance/README.md)
+describes the exact upstream fix, checksum verification and removal conditions.
+No application version or unrelated dependency version changes are included.
+
+Local checks used Linux x86-64, Rust 1.99.1, Node 22.22.3 and the existing Zig
+C compiler/linker. The iterator tests linked the actual installed GLib/GObject/GIO
+2.88 runtime through local library search settings; no system packages were installed.
+
+| Status | Check | Result / boundary |
+| --- | --- | --- |
+| PASS | `python3 scripts/verify-glib-backport.py --check-selection` | All 121 upstream crate files equal the verified original archive plus exact upstream patch; locked Cargo metadata selects only local GLib 0.18.5 at `vendor/glib`. |
+| PASS | `python3 -m unittest discover -s scripts/tests` | 15 integrity/selection cases, including tampered inputs/source/licenses and registry/wrong-path/unused selection rejection. |
+| PASS | `cargo test --locked --release -p scope-glib-variant-regression` | 9 optimized iterator tests. Seven independent content-reading cases segfaulted with pristine 0.18.5; all nine pass with the backport. |
+| PASS | `cargo test --workspace --exclude scope-desktop --locked` | 74 tests: 40 core, 23 device fixtures, 2 MCP and 9 GLib iterator regressions. Real local HTTP/TLS tests and fake ADB are not interactive GUI/device acceptance. |
+| PASS | `cargo fmt --all -- --check` | Vendored GLib remains excluded; original source bytes are preserved. |
+| PASS | `npm test -- --run`; `npm run build` | 15 frontend tests and TypeScript/Vite production build. |
+| PASS | `node --test scripts/licenses.test.mjs scripts/release.test.mjs` | 6 attribution tests and 3 release/resource tests. |
+| PASS | `python3 -m unittest discover -s resources/device/tests` | 3 installer tests. |
+| PASS | `npm test --prefix tools/har-compare` | 205 HAR tests. Contract lab also passed after its separate locked dependencies were installed. |
+| PASS | `npm audit --audit-level=high` | Zero reported npm vulnerabilities. |
+| PASS | Public resource staging/verification | 67 filtered files including the newly built MCP helper. |
+| FAIL (environment) | `cargo test --workspace --locked` | `gdk-sys` cannot run `pkg-config` for `gdk-3.0 >= 3.22`; GTK development prerequisites are unavailable on this host. |
+| FAIL (environment) | `npm run package` | Optimized locked `scope-mcp` build and frontend build pass; Tauri packaging fails at `glib-sys` because `pkg-config` / native desktop development metadata is missing. No installer produced. |
+| NOT RUN | `node scripts/smoke.mjs` | Requires the desktop binary that this host cannot build; existing core/MCP tests are separate evidence. |
+| NOT RUN | Interactive GTK/dialogs, installer launch, Android/device and other architectures | Headless/iterator tests do not establish these acceptance criteria. Issue #11 must remain open. |
+
+The first local headless compile needed the existing Zig `CC`/`AR` selectors;
+with those configured the complete available suite passed. Initial npm installation
+used an unwritable default cache; rerunning with a local cache passed. An initial
+contract-lab invocation lacked its separately locked XML dependency; after its
+locked install the checks passed. These were environment/setup failures, not
+suppressed test failures. Existing upstream GLib warnings are preserved.
+
+The established `cargo-about` 0.9.3 generator regenerated 226 Rust license sections
+and seven npm runtime notices. All original license texts are byte-identical; GLib
+retains gtk-rs attribution and links the upstream crate and backport provenance.
+Both recorded lockfile hashes match and the generated files contain no local paths.
+
+Current `cargo audit` 0.22.2 returned exit 0 against database commit
+`309392b18f6b17022f82c701f300433126901068`: zero vulnerability-list entries and
+three unmaintained findings (`pin-utils`, `proc-macro-error`, `rustls-pemfile`).
+Local path GLib is excluded by this tool's registry-source filter; its absence
+is not security verification. See [DEPENDENCIES.md](DEPENDENCIES.md) for advisory
+IDs and the backport's independent source/test evidence. No ignores are configured.
+
+A fresh independent whole-change review found no substantive issues. Hosted
+three-platform checks remain separate evidence; local results are not a claim
+that hosted CI passed.
+
 ## 1.2.1 maintenance preparation — 2026-11-06
 
 This candidate updates the macOS CI and release build host from `macos-14` to

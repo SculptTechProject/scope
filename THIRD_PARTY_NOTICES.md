@@ -18,6 +18,21 @@ Rust 1.99.1 standard-library notices are retained separately in
 Each collection records its source lockfile hash; regeneration is described in
 [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md). Third-party terms remain in force.
 
+## GLib compatibility backport
+
+`vendor/glib` contains GLib **0.18.5**, copyright its gtk-rs contributors,
+under its original [MIT license](vendor/glib/LICENSE) and
+[copyright notice](vendor/glib/COPYRIGHT). Scope applies only gtk-rs upstream
+commit `b5a4071e439bef2b5eea76c3aa25e5ae84839e34` to repair
+`VariantStrIter` unsoundness (RUSTSEC-2024-0429). This is a Scope-maintained
+backport; it is not an upstream 0.18.5 release update.
+
+The [provenance and verification instructions](vendor/glib-provenance/README.md)
+retain the pristine crates.io archive, exact upstream patch and input/source
+hashes. Both directories must be retained in corresponding source archives.
+GLib's original license and authorship remain applicable; linked native GNOME
+libraries have their own license terms described in GLib's `COPYRIGHT`.
+
 ## HTTP Toolkit interception scripts
 
 Files: `resources/frida/config-template.js` and `resources/frida/android/*.js`.

@@ -1,0 +1,14 @@
+{
+  "crate": "glib",
+  "version": "0.18.5",
+  "archiveUrl": "https://static.crates.io/crates/glib/glib-0.18.5.crate",
+  "archiveSha256": "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5",
+  "originalRegistryLockCommit": "98ba0ef71c0ccf50ccb9773cfa02807b6d374348",
+  "originalVcsCommit": "42b9caf98e03ded086362d9653ca58fe94dc8658",
+  "upstreamFixCommit": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+  "patchUrl": "https://github.com/gtk-rs/gtk-rs-core/commit/b5a4071e439bef2b5eea76c3aa25e5ae84839e34.patch",
+  "patchSha256": "a742bf59f1b00af0f434623b34e2fd969dc8697d37c796efdf909dd9eb19b854",
+  "changedFile": "src/variant_iter.rs",
+  "originalSourceSha256": "1fd02859333761c45321b32f28b24233446b97d0022a90d3a937ed162585b90e",
+  "patchedSourceSha256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc"
+}
