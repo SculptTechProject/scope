@@ -39,8 +39,8 @@ jobs:
           output: scope-reports
 ```
 
-The example targets the planned `v1.2.0` release tag; it becomes usable after
-that tag is published. **Pin an inspected full commit SHA before using it with
+The example targets the published `v1.2.0` release tag.
+**Pin an inspected full commit SHA before using it with
 sensitive captures.** Scope v1.1.0 predates the Action; do not use that tag as its
 ref. Captures in the snippet must already exist
 on your runner, from your own approved capture step or private storage. Do not
