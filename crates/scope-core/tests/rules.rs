@@ -18,9 +18,12 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
-use tokio::{net::TcpListener, task::JoinHandle};
+use tokio::{
+    net::TcpListener,
+    task::{JoinHandle, JoinSet},
+};
 
 async fn fixture(engine: &Engine, tls: bool) -> (String, Arc<AtomicUsize>, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -111,12 +114,15 @@ async fn fixture(engine: &Engine, tls: bool) -> (String, Arc<AtomicUsize>, JoinH
     )
 }
 fn client(engine: &Engine, port: u16) -> reqwest::Client {
+    client_with_timeout(engine, port, Duration::from_secs(5))
+}
+fn client_with_timeout(engine: &Engine, port: u16, timeout: Duration) -> reqwest::Client {
     reqwest::Client::builder()
         .proxy(reqwest::Proxy::all(format!("http://127.0.0.1:{port}")).unwrap())
         .add_root_certificate(
             reqwest::Certificate::from_pem(&std::fs::read(engine.ca_cert_path()).unwrap()).unwrap(),
         )
-        .timeout(Duration::from_secs(5))
+        .timeout(timeout)
         .build()
         .unwrap()
 }
@@ -425,13 +431,7 @@ fn invalid_rules_do_not_replace_last_good_configuration() {
         serde_json::to_value(old).unwrap()
     );
 }
-#[tokio::test]
-async fn rules_run_before_breakpoints_and_concurrent_mock_requests_keep_evidence() {
-    let dir = tempfile::tempdir().unwrap();
-    let engine = Engine::open(dir.path()).unwrap();
-    let session = engine
-        .create_session("Breakpoints".into(), "test".into())
-        .unwrap();
+fn install_mock_rules(engine: &Engine) -> String {
     let rewrite = engine
         .save_rule(rule(
             1,
@@ -453,6 +453,16 @@ async fn rules_run_before_breakpoints_and_concurrent_mock_requests_keep_evidence
             json!({"type":"rewriteResponse","body":"response rule"}),
         ))
         .unwrap();
+    rewrite.id
+}
+#[tokio::test]
+async fn rules_run_before_breakpoints() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let session = engine
+        .create_session("Breakpoints".into(), "test".into())
+        .unwrap();
+    let rewrite_id = install_mock_rules(&engine);
     let proxy = engine.start_proxy(session.id.clone(), 0).await.unwrap();
     let client = client(&engine, proxy.port);
     engine.set_breakpoints(true, true);
@@ -504,34 +514,110 @@ async fn rules_run_before_breakpoints_and_concurrent_mock_requests_keep_evidence
     assert_eq!(e.original_request.unwrap()["body"], "before");
     assert_eq!(e.original_response.unwrap()["body"], "mock body");
     assert_eq!(e.applied_rules.len(), 3);
-    engine.set_breakpoints(false, false);
-    let mut requests = Vec::new();
-    for i in 0..32 {
-        let client = client.clone();
-        requests.push(tokio::spawn(async move {
-            let response = client
-                .get(format!("http://localhost:1/pause?i={i}"))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(response.status(), 201);
-            assert_eq!(response.text().await.unwrap(), "response rule");
-        }));
-    }
-    for request in requests {
-        request.await.unwrap();
-    }
+    assert_eq!(e.provenance, TrafficProvenance::Mock);
+    assert_eq!(e.applied_rules[0].rule_id, rewrite_id);
     let rows = engine.list_exchanges(&session.id, None, 100, 0).unwrap();
-    assert_eq!(rows.len(), 33);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, req.exchange_id);
+    engine.stop_proxy().await.unwrap();
+}
+
+#[tokio::test]
+async fn concurrent_mock_requests_keep_all_evidence() {
+    const CLIENTS: usize = 32;
+    // This burst performs six synchronous SQLite saves per exchange (192
+    // autocommit statements) on the current-thread test runtime. Give this
+    // stress client its own budget; interactive fixtures keep their 5s limit.
+    // This is CI allowance, not a measurement of Windows storage latency.
+    const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
+    const BATCH_TIMEOUT: Duration = Duration::from_secs(60);
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(dir.path()).unwrap();
+    let session = engine
+        .create_session("Concurrent rules".into(), "test".into())
+        .unwrap();
+    let rewrite_id = install_mock_rules(&engine);
+    let proxy = engine.start_proxy(session.id.clone(), 0).await.unwrap();
+    let client = client_with_timeout(&engine, proxy.port, CLIENT_TIMEOUT);
+    let started = Instant::now();
+    let deadline = tokio::time::Instant::now() + BATCH_TIMEOUT;
+    let mut requests = JoinSet::new();
+    for i in 0..CLIENTS {
+        let client = client.clone();
+        requests.spawn(async move {
+            let started = Instant::now();
+            let result = async {
+                let response = client
+                    .get(format!("http://localhost:1/pause?i={i}"))
+                    .send()
+                    .await?;
+                let status = response.status();
+                let body = response.text().await?;
+                Ok::<_, reqwest::Error>((status, body))
+            }
+            .await;
+            (i, started.elapsed(), result)
+        });
+    }
+    let mut joined = 0;
+    let mut completed = 0;
+    let mut successful = 0;
+    let mut failures = Vec::new();
+    let mut timed_out = false;
+    while !requests.is_empty() {
+        let next = if timed_out {
+            requests.join_next().await
+        } else {
+            match tokio::time::timeout_at(deadline, requests.join_next()).await {
+                Ok(next) => next,
+                Err(_) => {
+                    // Tokio deadlines are cooperative: a synchronous save can
+                    // delay observing this timer. Abort only on whole-batch
+                    // failure, then join every remaining task before asserting.
+                    timed_out = true;
+                    requests.abort_all();
+                    continue;
+                }
+            }
+        };
+        let Some(result) = next else { break };
+        joined += 1;
+        match result {
+            Ok((i, elapsed, result)) => {
+                completed += 1;
+                match result {
+                    Ok((status, body)) if status == 201 && body == "response rule" => {
+                        successful += 1
+                    }
+                    Ok((status, body)) => failures.push(format!(
+                        "client {i} after {elapsed:?}: status={status}, body={body:?}"
+                    )),
+                    Err(error) => failures.push(format!("client {i} after {elapsed:?}: {error:?}")),
+                }
+            }
+            Err(error) => failures.push(format!("join failure: {error:?}")),
+        }
+    }
+    engine.stop_proxy().await.unwrap();
+    let elapsed = started.elapsed();
+    eprintln!("32-client mock batch: elapsed={elapsed:?}, completed={completed}/{CLIENTS}, joined={joined}/{CLIENTS}, successful={successful}/{CLIENTS}, batch_timeout={timed_out}");
+    assert!(!timed_out && failures.is_empty(), "mock batch failed after {elapsed:?}: completed={completed}/{CLIENTS}, joined={joined}/{CLIENTS}, successful={successful}/{CLIENTS}, client_budget={CLIENT_TIMEOUT:?}, batch_budget={BATCH_TIMEOUT:?}, batch_timeout={timed_out}, failures={failures:?}");
+    assert_eq!(joined, CLIENTS);
+    assert_eq!(successful, CLIENTS);
+    let rows = engine.list_exchanges(&session.id, None, 100, 0).unwrap();
+    assert_eq!(rows.len(), CLIENTS);
     assert!(rows.iter().all(|e| e.completed
+        && e.error.is_none()
+        && e.status == Some(201)
+        && e.response_body == "response rule"
         && e.provenance == TrafficProvenance::Mock
-        && e.applied_rules[0].rule_id == rewrite.id));
+        && e.applied_rules.len() == 3
+        && e.applied_rules[0].rule_id == rewrite_id));
     let ids = rows
         .iter()
         .map(|e| &e.id)
         .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(ids.len(), 33);
-    engine.stop_proxy().await.unwrap();
+    assert_eq!(ids.len(), CLIENTS);
 }
 #[tokio::test]
 async fn failed_and_interrupted_captures_are_completed_and_restart_recovers_inflight() {
