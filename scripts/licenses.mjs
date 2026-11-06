@@ -2,7 +2,7 @@
 // Regenerate redistributable notices from the exact Cargo and npm lockfiles.
 // Requires cargo-about 0.9.3 (`cargo install cargo-about --locked --features cli --version 0.9.3`).
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -34,6 +34,15 @@ if (metadataResult.status !== 0)
   );
 const workspaceMembers = new Set(JSON.parse(metadataResult.stdout).workspace_members);
 const scopeRepository = 'https://github.com/dalkedev/scope';
+function sameExistingManifest(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') return false;
+  try {
+    return realpathSync(left) === realpathSync(right);
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return false;
+    throw error;
+  }
+}
 function rustPackageNotice(p) {
   const notice = {
     name: p.name,
@@ -52,7 +61,7 @@ function rustPackageNotice(p) {
   } else if (
     p.name === 'glib' &&
     p.version === '0.18.5' &&
-    resolve(p.manifest_path) === join(root, 'vendor/glib/Cargo.toml') &&
+    sameExistingManifest(p.manifest_path, join(root, 'vendor/glib/Cargo.toml')) &&
     p.repository === 'https://github.com/gtk-rs/gtk-rs-core'
   ) {
     notice.source = `${scopeRepository}/tree/main/vendor/glib`;

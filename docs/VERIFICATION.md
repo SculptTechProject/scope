@@ -1,5 +1,39 @@
 # Recorded verification
 
+## License attribution path follow-up — 2026-11-06
+
+The GLib backport attribution now compares real filesystem manifest paths.
+The previous lexical comparison lost the backport/provenance links when macOS
+resolved a temporary-directory alias differently from Cargo's manifest path.
+A real directory alias reproduced the loss locally before the fix; a missing
+manifest also incorrectly claimed the backport. Both regressions now pass,
+without modifying vendored source, copyright/license text or dependency versions.
+
+Fixtures create existing manifest files and execute the real notice generator
+in a child Node process. Only Cargo discovery data is stubbed using a test-only
+Node preload, so the same tests run on Linux, macOS and Windows without Unix
+shebang or Windows shell wrappers. The normal checks and release-build matrix
+now run attribution regressions on all three platforms. Missing files return a
+non-match; other filesystem errors remain visible instead of silently claiming
+that source is verified.
+
+Local Node 22.22.3: eight attribution tests and three release/resource tests pass;
+TypeScript/Vite production build and public-resource verification pass. Actual
+cargo-about 0.9.3 regeneration produces 226 Rust sections and seven npm notices,
+byte-identical to the previous committed JSON/HTML. The unchanged lockfile hashes
+match both generated inventories:
+
+| Lockfile | SHA-256 |
+| --- | --- |
+| `Cargo.lock` | `6b8d93fb0ae484a4fbd6093f0055a7653881ed2a393076fed34b0905fcaa0479` |
+| `package-lock.json` | `c5ffec0b4bcf200ad40550cfe7796c4f402b98ed5a7aaf59ee8183436e2fd07b` |
+
+GLib retains its gtk-rs repository/authors plus upstream crate, modified-source
+and provenance links. All 121 vendored files still pass the exact archive+patch
+verifier and locked Cargo selection. A fresh independent review found no
+production issue; its minor Windows JSON-escaping assertion gap was corrected.
+Hosted platform attribution results are separate PR check evidence.
+
 ## GLib hosted acceptance follow-up — 2026-11-06
 
 At `0799385`, [hosted run 42269942248](https://github.com/dalkedev/scope/actions/runs/42269942248)
