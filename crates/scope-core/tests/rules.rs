@@ -519,6 +519,31 @@ async fn rules_run_before_breakpoints() {
     let rows = engine.list_exchanges(&session.id, None, 100, 0).unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].id, req.exchange_id);
+
+    // Keep the enabled -> disabled transition covered separately from the
+    // persistence stress batch: no manual breakpoint resolution is needed.
+    engine.set_breakpoints(false, false);
+    let status = engine.proxy_status();
+    assert!(!status.request_breakpoint);
+    assert!(!status.response_breakpoint);
+    let unpaused = client
+        .get("http://localhost:1/pause?breakpoints=disabled")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unpaused.status(), 201);
+    assert_eq!(unpaused.text().await.unwrap(), "response rule");
+    assert!(engine.pending().is_empty());
+    let rows = engine.list_exchanges(&session.id, None, 100, 0).unwrap();
+    assert_eq!(rows.len(), 2);
+    let after_disable = rows.iter().find(|row| row.id != req.exchange_id).unwrap();
+    assert!(after_disable.completed);
+    assert!(after_disable.error.is_none());
+    assert_eq!(after_disable.status, Some(201));
+    assert_eq!(after_disable.provenance, TrafficProvenance::Mock);
+    assert_eq!(after_disable.response_body, "response rule");
+    assert_eq!(after_disable.applied_rules.len(), 3);
+    assert_eq!(after_disable.applied_rules[0].rule_id, rewrite_id);
     engine.stop_proxy().await.unwrap();
 }
 
