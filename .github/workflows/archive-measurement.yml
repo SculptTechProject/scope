@@ -29,7 +29,8 @@ jobs:
       - name: Runner regressions
         run: python -m unittest discover -s scripts/tests -p test_measure_archive.py
       - name: Evidence detector regressions
-        run: cargo test --locked -p scope-core --lib diagnostics::
+        run: |
+          cargo test --locked -p scope-core --lib diagnostics::
       - name: Measure fresh synthetic archives (debug and release separately)
         run: python scripts/measure-archive.py --profiles debug release --samples 3 --workers 0 2 --output-dir .runtime/archive-measurement
       - name: Upload numeric synthetic diagnostics only
