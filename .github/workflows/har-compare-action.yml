@@ -16,7 +16,7 @@ on:
       diagnostic:
         description: Explicit diagnostic (archive measurement never runs the HAR consumer)
         type: choice
-        options: [har-composite, archive-measurement]
+        options: [har-composite, archive-measurement, runner-regressions]
         required: false
         default: har-composite
 
@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   consumer:
-    if: github.event_name != 'workflow_dispatch' || inputs.diagnostic != 'archive-measurement'
+    if: github.event_name != 'workflow_dispatch' || (inputs.diagnostic != 'archive-measurement' && inputs.diagnostic != 'runner-regressions')
     name: Composite ${{ matrix.scenario }}
     runs-on: ubuntu-22.04
     timeout-minutes: 5
@@ -83,5 +83,13 @@ jobs:
     # Registered manual entry point while the dedicated workflow is branch-only.
     if: github.event_name == 'workflow_dispatch' && inputs.diagnostic == 'archive-measurement'
     uses: ./.github/workflows/archive-measurement.yml
+    permissions:
+      contents: read
+
+  runner-regressions:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnostic == 'runner-regressions'
+    uses: ./.github/workflows/archive-measurement.yml
+    with:
+      runner_tests_only: true
     permissions:
       contents: read

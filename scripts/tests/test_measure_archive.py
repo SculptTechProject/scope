@@ -49,6 +49,17 @@ def valid_report():
 
 
 class MeasurementRunnerTests(unittest.TestCase):
+    def test_normal_completion_preserves_output_and_exit_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for code, status in [(0, 'PASS'), (3, 'FAIL')]:
+                result = measure.run_bounded([sys.executable, '-c',
+                    f"import sys; print('synthetic output'); sys.exit({code})"],
+                    Path(directory), {}, 5)
+                self.assertEqual(result['status'], status)
+                self.assertEqual(result['returncode'], code)
+                self.assertEqual(result['output'].strip(), 'synthetic output')
+                self.assertFalse(result['cleanup_uncertain'])
+
     def test_hard_deadline_kills_and_reaps_stalled_child(self):
         with tempfile.TemporaryDirectory() as directory:
             result = measure.run_bounded([sys.executable, '-c', 'import time; time.sleep(10)'], Path(directory), {}, .1)

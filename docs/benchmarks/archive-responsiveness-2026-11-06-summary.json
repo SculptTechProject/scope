@@ -1344,5 +1344,14 @@
       "definition": "UTF-8 file bytes before the first literal newline + #[test] + newline; separator and subsequent test functions excluded.",
       "sha256": "bacc8d874415564f56f69356c100d3ede403486d56b9e9bec80086b9a0874802"
     }
+  },
+  "postmeasurement_runner_cancellation_change": {
+    "reason": "Shared bounded tree termination/reaping on deadline and parent cancellation/exception; cancellation is reraised. Normal outputs, measurement commands and Rust workload/timing implementation are unchanged.",
+    "files_sha256": {
+      "scripts/measure-archive.py": "45485241ffb7f0c0384be7e5f88ca141d3c8235127cdd8491af1c04942bffd8e",
+      ".github/workflows/archive-measurement.yml": "de71fa332d5c4e59dbfc5b8891bda62db5431f90a5bdd2137aa03fc1b0125e26",
+      ".github/workflows/har-compare-action.yml": "22022e14f726f7d51cf127b1935b9283cff8f016c49d2caf6abbc781ab384343"
+    },
+    "validation": "Disposable child/descendant regressions; actual POSIX SIGINT and injected Python cancellation/exception. Windows console Ctrl+C is not claimed."
   }
 }

@@ -20,34 +20,64 @@ ROOT = Path(__file__).resolve().parents[1]
 WINDOWS = os.name == 'nt'
 
 
+def terminate_and_reap(child):
+    """Bounded cleanup of this owned process tree; return cleanup uncertainty."""
+    uncertain = False
+    if WINDOWS:
+        try:
+            killed = subprocess.run(['taskkill', '/PID', str(child.pid), '/T', '/F'],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    timeout=10, check=False)
+            uncertain = killed.returncode != 0
+        except (OSError, subprocess.TimeoutExpired):
+            uncertain = True  # Direct kill cannot confirm descendant cleanup.
+    else:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            uncertain = True
+    try:
+        if child.poll() is None:
+            child.kill()
+    except ProcessLookupError:
+        pass
+    except OSError:
+        uncertain = True
+    try:
+        child.wait(timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        uncertain = True
+    return uncertain
+
+
 def run_bounded(command, cwd, env, timeout):
-    """Kill/reap after a hard deadline; expose uncertainty about descendants."""
+    """Own the child tree until normal completion, deadline or parent exception."""
     kwargs = {'start_new_session': True} if os.name != 'nt' else {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP}
     with tempfile.TemporaryFile() as output:
-        child = subprocess.Popen(command, cwd=cwd, env=env, stdout=output, stderr=subprocess.STDOUT, **kwargs)
+        child = None
         timed_out = False
         cleanup_uncertain = False
         try:
-            child.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            if WINDOWS:
+            child = subprocess.Popen(command, cwd=cwd, env=env, stdout=output, stderr=subprocess.STDOUT, **kwargs)
+            try:
+                child.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                cleanup_uncertain = terminate_and_reap(child)
+            output.seek(0)
+            # Cargo JSON is bounded here; do not export compiler output or local paths.
+            captured = output.read(16 * 1024 * 1024).decode('utf-8', errors='replace')
+        except BaseException as error:
+            if child is not None:
                 try:
-                    killed = subprocess.run(['taskkill', '/PID', str(child.pid), '/T', '/F'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False)
-                    cleanup_uncertain = killed.returncode != 0
-                except (OSError, subprocess.TimeoutExpired):
-                    cleanup_uncertain = True  # Direct kill cannot confirm descendant cleanup.
-            else:
-                try:
-                    os.killpg(child.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            if child.poll() is None:
-                child.kill()
-            child.wait(timeout=10)
-        output.seek(0)
-        # Cargo JSON is bounded here; do not export compiler output or local paths.
-        captured = output.read(16 * 1024 * 1024).decode('utf-8', errors='replace')
+                    uncertain = terminate_and_reap(child)
+                except BaseException:
+                    uncertain = True
+                if uncertain:
+                    error.add_note('Process-tree termination or reaping could not be fully confirmed.')
+            raise
     return {'status': 'TIMEOUT' if timed_out else ('PASS' if child.returncode == 0 else 'FAIL'),
             'returncode': child.returncode, 'output': captured, 'cleanup_uncertain': cleanup_uncertain}
 

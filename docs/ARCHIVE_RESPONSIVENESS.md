@@ -36,7 +36,9 @@ or native-security changes, and a 45-minute job limit. Each runner exports one
 allowlisted numeric JSON artifact; compiler logs, archives and temporary CA keys
 are excluded. The Python runner has an overall 30-minute budget, bounded builds
 and child processes, and kills/reaps children on hard timeout. A failure to
-establish process-tree cleanup ends further sampling.
+establish process-tree cleanup ends further sampling. Parent cancellation or an
+exception also invokes the same bounded tree termination/reaping before the
+original exception is reraised; uncertain cleanup is attached as a fixed note.
 
 ## Workload and interpretation
 
@@ -137,8 +139,9 @@ reports passed the strict schema validator, source/clean-tree/run/attempt/sample
 identity checks and exact evidence counts. Independent review recalculated all
 16 groups and every displayed table cell. Recorded whole-file hashes identify
 the measured commit. Subsequent changes add documentation/results and correct
-one ordinary-CI assertion in the probe regression tests, described below. All
-other recorded source files match; the probe runtime implementation is byte-
+one ordinary-CI assertion in the probe regression tests, described below. The later runner cancellation fix and Python-only test workflow are recorded
+as explicit source exceptions in the summary; other recorded sources match.
+The probe runtime implementation is byte-
 identical before its first `#[test]` function. The summary defines that UTF-8
 prefix boundary precisely and records its verified SHA-256. No timing logic,
 threshold, window filter or workload changed after the measured commit.
@@ -232,6 +235,33 @@ false-control rejection remain checked. Deterministic interval/empty-collector
 regressions and the four hosted blocking controls remain unchanged. This is a
 normal-CI test correction, not a measurement change or timeout increase. The
 summary preserves the failed commit/job and the unchanged-runtime-prefix proof.
+
+## Parent cancellation cleanup follow-up
+
+The original runner cleaned detached child trees only when its deadline expired.
+A parent SIGINT/KeyboardInterrupt could leave Cargo or a test process running.
+The runner now shares finite tree termination and direct-child reaping between
+TimeoutExpired and parent BaseException paths, then reraises the original parent
+exception. Windows taskkill failure/timeout still marks cleanup uncertainty;
+direct-child fallback does not falsely establish descendant cleanup. The helper
+uses at most 10 seconds for taskkill and 10 seconds for reaping per attempt.
+
+Disposable-process regressions launch a sleeping child and descendant, prove
+actual POSIX SIGINT cleanup and preserved exception propagation, and always clean
+the fixture's own recorded PIDs/groups. Native Windows tests use injected Python
+KeyboardInterrupt/RuntimeError with real Windows process trees; console Ctrl+C
+coverage is NOT RUN. A manually selected `runner-regressions` choice in the HAR
+entry point runs only Python tests on Linux/Windows, with a five-minute job limit:
+
+```sh
+gh workflow run har-compare-action.yml --ref YOUR_BRANCH -f diagnostic=runner-regressions
+```
+
+Rust setup/builds, measurements and report upload are skipped for this choice.
+The successful-process output/status contract and Rust measurement implementation
+are unchanged. Existing Linux/Windows results remain pinned to measured source
+`19aec4f`; no long benchmark rerun is implied by this cleanup-only correction.
+Exact follow-up test receipts and head are recorded in the PR description.
 
 ## Bounded writer proposal (not implemented)
 
