@@ -1,9 +1,11 @@
 # Vendored GLib 0.18.5: CodeQL triage
 
-The seven Rust alerts introduced into analysis by PR #27 are proposed **false
-positives for the exact reported flows**, subject to independent operator review.
-They have not been dismissed, suppressed or fixed by excluding vendor code. This
-is a technical classification, not a claim that every unsafe GLib path is safe.
+At the initial triage below, the seven Rust alerts introduced into analysis by
+PR #27 were proposed **false positives for the exact reported flows**, subject to
+independent operator review. None had been dismissed at that point. The final
+operator decisions are recorded separately below. No vendor exclusion or blanket
+suppression is used. These classifications do not establish that every unsafe
+GLib path is safe.
 The vendored crate still differs from its pristine archive only by the two-line
 upstream `VariantStrIter` backport; its complete byte verification is unchanged.
 
@@ -126,7 +128,7 @@ unique tail, unchanged buffer address/capacity, NULL removed slots and terminato
 then successful buffer reuse. Truncation to zero and final slice/external-owner
 destruction produce exactly four finalizations with no duplicate drops.
 
-## Validation and decisions still required
+## Validation and initial review boundary
 
 Run `cargo test --locked --release -p scope-glib-variant-regression` on Linux.
 The follow-up adds 15 concrete cases (2 logging, 9 translation, 4 ownership),
@@ -136,11 +138,33 @@ production fixes. All native calls use real installed GLib/GObject/GIO libraries
 No sanitizer or Miri result is claimed, nor a proof for every unsafe caller,
 platform, FFI API or application logging path.
 
-The independent operator must review these proposed dispositions. No alert state,
-query, workflow security configuration, vendor exclusion or allowlist was changed.
+The initial triage required independent operator review of these proposed
+dispositions. The source-authoring task changed no alert state, query, workflow
+security configuration, vendor exclusion or allowlist.
 The baseline here is exactly seven alerts; a new-head analysis is separate
 evidence. The new concrete boxed derive exercises the same implementation as
 `MyBoxed` and may introduce another test-only analysis location. Any newly reported
 location requires its own exact-flow review, not automatic classification.
 Platform checks and Windows verifier acceptance are reported separately in the PR.
 Issue #11 remains open until interactive GTK/dialog acceptance has been tested.
+
+## Independent operator decisions — 6 November 2026
+
+Alerts 4–10 were independently reviewed against the complete baseline SARIF and
+the concrete generic instantiations described above, then individually dismissed
+as false positives with alert-specific explanations. The review did not change
+CodeQL queries, vendor coverage or workflow security configuration.
+
+Alert [11](https://github.com/dalkedev/scope/security/code-scanning/11), introduced
+by the new test-only `CountedBoxed` derive, received a separate review against
+[analysis 2114713790](https://api.github.com/repos/dalkedev/scope/code-scanning/analyses/2114713790)
+at `eec083e227ffa4230d0fc186f4a3613b647aef41`. Its four charset/error paths again
+conflate incompatible generic conversions: the derive accepts concrete
+`CountedBoxed` pointers, while the reported callers produce strings or `Error`.
+No connecting cast exists in those flows. The ownership tests exercise actual
+boxed allocations, transfer modes and clone/drop counts. This separate alert was
+individually dismissed as a false positive.
+
+[The independent review record](https://github.com/dalkedev/scope/pull/27#issuecomment-6693586655)
+links these decisions to their evidence. The eight decisions apply to those exact
+reported flows; any newly introduced alert still requires its own review.
