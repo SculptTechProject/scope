@@ -37,11 +37,18 @@ cargo test --locked --release -p scope-glib-variant-regression
 
 The first command works offline, including from a source archive without `.git`.
 It checks the pristine archive and exact patch hashes, replays `git apply -p2` in
-an isolated temporary directory, checks both source hashes, and compares **every
+an isolated temporary directory with per-command `core.autocrlf=false` and
+`core.eol=lf`, checks both source hashes, and compares **every
 vendored file byte and the complete file set** with the result. Extra, missing,
 changed files and symlinks fail verification. To reconstruct manually, extract
 the verified archive into a temporary directory outside any Git checkout, enter
-`glib-0.18.5`, and run `git apply -p2 /path/to/variant-str-iter.patch`.
+`glib-0.18.5`, and run
+`git -c core.autocrlf=false -c core.eol=lf apply -p2 /path/to/variant-str-iter.patch`.
+These command-local settings preserve exact archive bytes even if inherited global
+Git settings request CRLF conversion; they never rewrite the user's configuration.
+The Python regression suite injects such a temporary global config and runs in the
+normal Linux, macOS and Windows CI matrix. No checksums or source comparisons are
+relaxed or normalized.
 
 The second command additionally runs `cargo metadata --locked` and requires one
 local GLib 0.18.5 package at `vendor/glib/Cargo.toml`, used by the resolved graph

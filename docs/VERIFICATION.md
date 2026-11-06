@@ -1,5 +1,40 @@
 # Recorded verification
 
+## GLib hosted acceptance follow-up — 2026-11-06
+
+At `0799385`, [hosted run 42269942248](https://github.com/dalkedev/scope/actions/runs/42269942248)
+passed Linux and macOS workspace/frontend/package/desktop-engine/MCP checks.
+Windows failed in the integrity verifier with `Patched VariantStrIter source
+checksum mismatch`, before its remaining tests could run. Those successful
+platform results supersede the earlier local-host native prerequisite limit
+for those hosted platforms; they do not prove interactive GTK/dialog acceptance.
+
+The replay runs outside the repository's `.gitattributes`. An isolated inherited
+global config with `core.autocrlf=true` and `core.eol=crlf` reproduced the same
+checksum failure on Linux. The fix pins `core.autocrlf=false` and `core.eol=lf`
+only on the replay command, without changing global config, vendor bytes, hashes
+or byte comparisons. The regression verifies successful replay and that the
+injected global config is unchanged. It runs in the existing three-platform CI
+matrix, alongside the full tamper/selection suite.
+
+Current local follow-up checks:
+
+| Status | Check | Result |
+| --- | --- | --- |
+| EXPECTED FAIL then PASS | Hostile inherited Git config regression | Original replay reproduces the exact checksum mismatch; command-local settings fix it. |
+| PASS | Python integrity/selection tests | 16 cases, including unchanged user config and all previous tamper checks. |
+| PASS | Full-tree provenance and locked Cargo selection | All 121 original files plus the exact upstream backport; same real version and lockfile. |
+| PASS | Linux optimized GLib regression crate | 24 cases: nine iterator regressions plus two logging, nine translation and four ownership checks. |
+| PASS | Locked workspace excluding desktop | 89 tests: 40 core, 23 device, 2 MCP and 24 GLib cases. |
+
+The [CodeQL triage record](security/glib-0.18.5-codeql-triage.md) identifies all seven
+exact baseline alerts, proposes dispositions with source/type/FFI/lifetime
+reasoning, and documents concrete tests and their limits. The tests characterize
+existing behavior; no pointer/logging production fix or vendor change is claimed.
+All alert decisions remain with the independent operator. New-head hosted results
+are separate PR check evidence and must not be inferred from the old-head passes.
+Interactive GTK/dialog/installer/device acceptance remains untested; keep #11 open.
+
 ## GLib 0.18.5 backport — 2026-11-06
 
 This narrow change is based on Scope 1.2.1 (`98ba0ef`) and preserves the

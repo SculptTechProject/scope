@@ -1,5 +1,6 @@
 """Exercise the offline verifier against real pristine and modified artifacts."""
 import importlib.util
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -19,16 +20,33 @@ class BackportIntegrity(unittest.TestCase):
         shutil.copy(ROOT / 'Cargo.toml', self.root)
         shutil.copy(ROOT / 'Cargo.lock', self.root)
 
-    def verify(self):
+    def verify(self, env=None):
         return subprocess.run(
             [sys.executable, str(ROOT / 'scripts/verify-glib-backport.py'), '--root', str(self.root)],
-            capture_output=True, text=True,
+            capture_output=True, text=True, env=env,
         )
 
     def test_verified_backport_passes(self):
         result = self.verify()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('verified', result.stdout)
+
+    def test_inherited_global_crlf_conversion_cannot_change_replayed_bytes(self):
+        # Temporary replay has no repository attributes. A user's global Git
+        # settings must neither change verified bytes nor be rewritten by us.
+        config = self.root / 'hostile.gitconfig'
+        original = b'[core]\n\tautocrlf = true\n\teol = crlf\n'
+        config.write_bytes(original)
+        env = {**os.environ, 'GIT_CONFIG_GLOBAL': str(config), 'GIT_CONFIG_NOSYSTEM': '1'}
+        inherited = subprocess.run(
+            ['git', 'config', '--global', '--get', 'core.autocrlf'],
+            env=env, capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(inherited.stdout.strip(), 'true')
+        result = self.verify(env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('verified', result.stdout)
+        self.assertEqual(config.read_bytes(), original)
 
     def test_pristine_unsound_source_is_rejected(self):
         source = self.root / 'vendor/glib/src/variant_iter.rs'

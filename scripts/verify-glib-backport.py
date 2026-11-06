@@ -50,7 +50,11 @@ def verify_tree(root):
         source = work / CHANGED_FILE
         source.parent.mkdir(parents=True)
         source.write_bytes(expected[CHANGED_FILE])
-        subprocess.run(['git', 'apply', '-p2', str(patch.resolve())], cwd=work,
+        # This temporary tree has no repository .gitattributes. Pin conversion
+        # settings per invocation so inherited global Git config cannot alter
+        # the bytes whose exact upstream hashes we verify below.
+        subprocess.run(['git', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf',
+                        'apply', '-p2', str(patch.resolve())], cwd=work,
                        check=True, capture_output=True)
         expected[CHANGED_FILE] = source.read_bytes()
     require(sha256(expected[CHANGED_FILE]) == manifest['patchedSourceSha256'],
