@@ -17,15 +17,18 @@ python scripts/measure-archive.py --profiles debug release --samples 3 --workers
 The ignored unit-test harness and all observers are compiled only with
 `cfg(test)`; no diagnostic API or collector ships in the application. Normal
 CI runs deterministic detector regressions, not the ignored timing workload.
-The existing Build and check workflow has a manual `archive-measurement`
-diagnostic choice. Dispatch it explicitly against the reviewed branch:
+The dedicated workflow supports manual dispatch and reuse. Before that new file
+is registered on the default branch, the existing HAR composite workflow provides
+an explicit `archive-measurement` manual choice and calls it locally. Dispatch
+the registered entry point against the reviewed branch:
 
 ```sh
-gh workflow run checks.yml --ref YOUR_BRANCH -f diagnostic=archive-measurement
+gh workflow run har-compare-action.yml --ref YOUR_BRANCH -f diagnostic=archive-measurement
 ```
 
-Only the dedicated measurement jobs run on manual dispatch. Regular push/PR
-checks keep their existing commands. Dispatch has a separate concurrency group,
+Only dedicated measurement jobs run for this explicit choice; the HAR consumer
+is skipped. Default HAR dispatch and regular push/PR checks keep their existing
+commands. The checks/release workflows are unchanged. Dispatch has a separate concurrency group,
 contents-read permission, existing commit-pinned actions, no system-package installation
 or native-security changes, and a 45-minute job limit. Each runner exports one
 allowlisted numeric JSON artifact; compiler logs, archives and temporary CA keys
