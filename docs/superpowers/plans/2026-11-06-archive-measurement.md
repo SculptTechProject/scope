@@ -39,7 +39,10 @@ Files: diagnostic submodules, `scripts/measure-archive.py`, runner unit tests.
 ### Task 3: Hosted evidence and proposal
 
 Files: measurement workflow, `docs/ARCHIVE_RESPONSIVENESS.md`, allowlisted result JSON.
-- [ ] Review complete source before a single branch push/dispatch, reconcile receipts.
-- [ ] Obtain actual hosted Linux/Windows debug/release results and verify artifact provenance.
-- [ ] Document bounded writer ordering, backpressure, cancellation/restart/error guarantees from evidence.
-- [ ] Independent whole-branch review, affected tests, final PR referencing #28 and exact remote/body readback.
+- [x] Review complete source before branch publication and explicit dispatch; reconcile receipts.
+- [x] Obtain actual hosted Linux/Windows debug/release results and verify artifact provenance.
+- [x] Document bounded writer ordering, backpressure, cancellation/restart/error guarantees from evidence.
+- [x] Independent whole-branch/result review, affected checks, and one PR #30 referencing #28.
+
+Publication receipts (exact head, readiness, checks and final readback) are maintained
+in the PR description; no merge or release is part of this plan.

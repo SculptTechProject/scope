@@ -4,7 +4,9 @@ This investigates [#28](https://github.com/dalkedev/scope/issues/28) against
 Scope 1.2.2. It does not change production scheduling, SQLite settings, capture
 limits, response ordering, native security settings or existing test deadlines.
 Six `Engine::save` calls per successful mock exchange mean 192 upserts for 32
-requests. That is **not** a count of disk flushes.
+requests. That is **not** a count of disk flushes. The corrected hosted Linux and
+Windows dataset below passes all 48 synthetic workload batches and every required
+positive control; it does not establish a production performance improvement.
 
 ## Reproduce
 
@@ -43,6 +45,9 @@ batches, each using a fresh temporary file-backed archive and client pool.
 Thirty-two barrier-released logical requests use shared reqwest client clones,
 HTTP/1.1, a 30-second client deadline and 60-second cooperative batch deadline.
 These are logical clients, not a claim of 32 simultaneous network connections.
+In JSON, workers=0 identifies current-thread execution on the calling thread;
+workers=2 selects two Tokio worker threads. Both runtimes cap the blocking pool
+at two threads and use one separate OS network-probe thread.
 URLs target only loopback; three real rules rewrite the empty request, mock a
 201 response, and rewrite that response. TLS uses actual CONNECT interception
 and the newly generated CA. Nothing is sent to an external origin.
@@ -92,7 +97,93 @@ configuration is not inspected; clean hosted runs are the controlled profile
 reference. Do not compare debug and release or differently constrained hosts as
 if they were matched experiments.
 
-## Result provenance
+## Corrected hosted results and provenance
+
+**PASS:** [run 42293997874](https://github.com/dalkedev/scope/actions/runs/42293997874),
+measured source `19aec4fc8ca63551c05a0380c157c5593f048efa`, clean checkouts on
+`ubuntu-22.04` and `windows-2022`, Rust 1.99.1, Python 3.12.16 on Linux /
+3.12.10 on Windows, four logical CPUs and two Cargo build jobs on each runner.
+Linux affinity exposed four CPUs;
+Windows affinity, memory/I/O quotas, filesystem type and peak RSS are NOT RUN.
+Unknown cgroup limits remain null, not assumed unlimited. Linux image version is
+`20261101.347.1`; Windows image version is NOT RUN (not captured in the report).
+Its selected label is `windows-2022`.
+Exact per-platform metadata and SQLite compile options remain in the raw datasets.
+
+All **48/48** workload batches passed: three samples for each OS × profile ×
+runtime × transport combination, 1,536 correct completed clients and persisted
+rows, and 9,216 successful measured save statements/revision increments. Each
+batch independently verified all rule evidence, original snapshots, request
+pairing and reopened IDs. All 48 rule-corruption and 48 independent row-loss
+controls detected the deliberate corruption, with baseline restoration checked.
+The four current-thread timer/network blocking controls passed (debug/release on
+both platforms); two-worker blocking controls remain intentionally NOT RUN.
+No sample overflow, probe failures in workload windows, cooperative timeout or
+observed client/batch deadline violation occurred.
+
+Both platforms reported SQLite 3.51.1, WAL, synchronous=2 (FULL), busy_timeout=5000ms,
+page_size=4096, cache_size=-2000 and wal_autocheckpoint=1000. The harness did not
+change these values. Every batch has both timer and network window coverage;
+raw reports retain all sample timestamps and explicit coverage states.
+
+- [Linux raw numeric report](benchmarks/archive-responsiveness-2026-11-06-linux.json)
+- [Windows raw numeric report](benchmarks/archive-responsiveness-2026-11-06-windows.json)
+- [Derived distributions, source hashes and artifact receipts](benchmarks/archive-responsiveness-2026-11-06-summary.json)
+
+The downloadable ZIP SHA-256 values were matched to GitHub's API
+artifact digests before extracting the sole allowlisted `measurement.json` file.
+The summary records artifact IDs/digests and raw JSON SHA-256 values. All runtime
+reports passed the strict schema validator, source/clean-tree/run/attempt/sample
+identity checks and exact evidence counts. Independent review recalculated all
+16 groups and every displayed table cell. The final PR may add documentation;
+its measurement-source hashes must continue to match this measured commit.
+
+### Descriptive timings (milliseconds)
+
+Each row has three batches. Batch is median (min–max). Client p95 pools the 96
+client durations within that row using nearest rank. Phase columns are medians
+of each batch's **sum of 192 saves**. Timer and echo columns are maxima of samples
+whose deadlines/attempts cover the workload window. These are small descriptive
+samples, without confidence intervals or significance claims. Do not pool profiles,
+add overlapping mutex/statement sums, or treat OS/hardware as a controlled single
+variable. Raw/derived files retain every sample, probe count and shutdown duration.
+
+| OS | Profile | Tokio workers | Transport | Batch median (range) | Client p95 | Σ serialize | Σ mutex wait | Σ SQL | Max timer lag | Max echo RTT |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Linux | debug | current | HTTP | 121.56 (110.79–123.57) | 121.12 | 8.48 | 0.04 | 89.76 | 111.69 | 111.41 |
+| Linux | debug | current | TLS | 198.53 (196.86–225.39) | 201.41 | 8.63 | 0.05 | 82.26 | 96.63 | 85.47 |
+| Linux | debug | 2 | HTTP | 85.19 (84.76–87.92) | 85.55 | 9.34 | 56.22 | 75.20 | 45.54 | 74.45 |
+| Linux | debug | 2 | TLS | 146.34 (140.94–193.33) | 180.68 | 9.09 | 50.86 | 79.14 | 62.20 | 53.21 |
+| Linux | release | current | HTTP | 74.94 (69.67–82.82) | 82.27 | 0.60 | 0.01 | 68.32 | 72.61 | 74.38 |
+| Linux | release | current | TLS | 131.55 (121.76–157.09) | 125.68 | 0.62 | 0.01 | 68.54 | 71.97 | 76.54 |
+| Linux | release | 2 | HTTP | 72.54 (71.52–75.02) | 73.88 | 0.77 | 65.22 | 68.05 | 48.92 | 63.89 |
+| Linux | release | 2 | TLS | 118.56 (116.03–153.06) | 143.52 | 0.70 | 60.80 | 69.67 | 54.57 | 35.75 |
+| Windows | debug | current | HTTP | 673.30 (651.91–753.71) | 750.43 | 8.97 | 0.04 | 636.30 | 731.97 | 731.12 |
+| Windows | debug | current | TLS | 749.69 (725.40–851.98) | 849.28 | 8.75 | 0.04 | 613.30 | 670.23 | 666.42 |
+| Windows | debug | 2 | HTTP | 648.30 (643.08–721.82) | 717.12 | 9.81 | 606.98 | 637.76 | 407.40 | 629.28 |
+| Windows | debug | 2 | TLS | 717.35 (675.94–723.68) | 720.50 | 9.56 | 562.43 | 623.42 | 580.99 | 533.91 |
+| Windows | release | current | HTTP | 600.55 (575.29–606.54) | 605.63 | 1.00 | 0.01 | 586.73 | 596.11 | 595.68 |
+| Windows | release | current | TLS | 599.64 (573.69–691.05) | 689.65 | 1.01 | 0.01 | 559.26 | 568.55 | 542.86 |
+| Windows | release | 2 | HTTP | 563.19 (561.49–573.37) | 569.16 | 1.10 | 545.89 | 555.80 | 559.00 | 562.33 |
+| Windows | release | 2 | TLS | 578.15 (570.08–624.50) | 583.99 | 1.11 | 534.21 | 561.51 | 409.62 | 416.58 |
+
+The current-thread profiles show delayed timer wakes and loopback echo servicing
+during these bursts. In these samples the synchronous SQL phase occupies much
+of batch wall time; two-worker runs also show connection-mutex waiting. These
+observations justify a controlled blocking-writer experiment, not a claim that
+SQLite disk latency caused the earlier Windows timeouts. SQL time includes
+internal locks, triggers, autocommit/checkpoint work and OS effects. TLS adds
+other scheduling/cryptographic work; no isolated storage or zero-write baseline
+was measured. The historical 29-client timeout failure was **not reproduced**.
+The four intentional blocking controls validate detection of known executor
+stalls; they do not attribute real-workload lag to one underlying cause.
+
+No production rewrite is implemented. The next design should first isolate
+scheduling while preserving every persistence barrier, then measure it against
+this harness with matched profiles. The size/admission/finalization prerequisites
+below remain unresolved; batching is a separate later experiment.
+
+## Preserved control-startup regression
 
 The first complete [measurement run 42292352293](https://github.com/dalkedev/scope/actions/runs/42292352293)
 at `04c78d202d61689a4c9444da120c375e0818a4fb` passed Linux. Windows passed all
@@ -111,9 +202,8 @@ archive rows or host identities are included.
 The harness now waits for independent network readiness **before** arming the
 heartbeat. Window filtering, thresholds, workload and production behavior remain
 unchanged. This fixes the observed readiness race; it does not promise
-deterministic OS scheduling. Corrected-source hosted Linux/Windows validation is
-**NOT RUN** until the next reviewed dispatch completes; the final result dataset
-will be recorded here before this PR is ready.
+deterministic OS scheduling. The corrected-source hosted dataset above passes
+the unchanged controls on both platforms; the original failed report remains preserved for regression evidence.
 
 Local debug smoke: all four HTTP/TLS × current-thread/two-worker batches passed
 with one sample per case, including the blocking and persisted-evidence controls.
@@ -140,6 +230,14 @@ overload result; no dropped writes, successful response or unbounded task-per-sa
 fallback is permitted. Reserve finalization capacity before admitting a capture
 so overload cannot deadlock its terminal error write. Resource reservations are
 released only after acknowledgement/finalization, not when a waiting future drops.
+
+Also bound capture owners and admission waiters separately: a candidate envelope
+is 32 admitted captures and at most eight pending admissions, with finite waiting
+deadlines. Reject excess admission explicitly before forwarding or buffering a
+body; do not create an unbounded task list waiting for queue capacity. Transport
+connections/handshakes need their own finite limits. These limits and rejection
+semantics require protocol/error-finalization tests before implementation; queue
+slots alone do not bound the whole capture process.
 
 This is a proposal, not a claim that eight slots or 128MiB is optimal. The
 existing 16MiB body limit does not bound an entire JSON exchange with headers,
