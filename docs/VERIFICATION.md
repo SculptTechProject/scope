@@ -1,5 +1,46 @@
 # Recorded verification
 
+## Concurrent rule fixture follow-up — 2026-11-06
+
+At `2ada212`, the [Windows job](https://github.com/dalkedev/scope/actions/runs/42281855023/job/128112730439)
+passed GLib integrity and all eight attribution tests, then the combined
+rule-ordering/concurrency fixture reported 29 of 32 client request timeouts.
+Its shared helper specified five seconds; the failed rules binary completed in
+15.15 seconds. This is observed test evidence, not measured per-request disk
+latency. The original combined test passed locally before this change.
+
+Source inspection shows six synchronous, mutex-held SQLite saves per successful
+mock exchange: 192 autocommit statements for the 32-client burst. On the default
+current-thread Tokio runtime these can delay network/timer progress. This is a
+plausible causal explanation, not proof of Windows storage latency or a GLib
+regression. Production persistence, SQLite settings and runtime timeouts are unchanged.
+
+The fixture now separates `rules_run_before_breakpoints` (one exact exchange,
+original/manual snapshots, response status/body and three-rule evidence) from
+`concurrent_mock_requests_keep_all_evidence` (32 clients and 32 unique complete
+mock exchanges, exact status/body and rule evidence). General clients retain
+five seconds; only the stress client uses 30 seconds with a 60-second cooperative
+batch deadline. Every spawned client is joined, including errors/panics. On a
+batch timeout remaining tasks are explicitly aborted and joined, then the whole
+test fails with elapsed/completed/joined/success counts. Synchronous work can
+delay observing a Tokio timer; this is not a hard wall-clock guarantee for a
+blocked disk. Clients are never retried or silently dropped.
+
+Local checks: all ten real rule tests pass, including 32/32 successful joined
+clients. Private controlled one-nanosecond client and batch budget probes both
+fail as intended while joining 32/32 tasks; normal source was restored exactly.
+These probes validate harness failure/cleanup paths, not Windows latency or a
+reproduction of its filesystem conditions. The full locked headless workspace
+suite passes 90 tests (41 core, 23 device, two MCP and 24 GLib). Formatting and
+exact vendor/lockfile/notice preservation checks pass.
+
+[Issue #28](https://github.com/dalkedev/scope/issues/28) records the separate
+archive-writer responsiveness investigation, measured Windows/Linux acceptance
+criteria and links to body-storage/backpressure work in #12. No production writer
+redesign or performance improvement is claimed by this test-only maintenance fix.
+New-head hosted Windows results remain separate PR check evidence; interactive
+GTK/dialog acceptance is still outside these tests and #11 remains open.
+
 ## License attribution path follow-up — 2026-11-06
 
 The GLib backport attribution now compares real filesystem manifest paths.
