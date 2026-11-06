@@ -11,7 +11,7 @@ on:
       tag:
         description: Existing version tag to build
         required: true
-        default: v1.2.0
+        default: v1.2.1
 permissions:
   contents: read
 concurrency:
@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-2022, ubuntu-22.04]
+        os: [macos-15, windows-2022, ubuntu-22.04]
     env:
       RELEASE_TAG: ${{ inputs.tag }}
     steps:

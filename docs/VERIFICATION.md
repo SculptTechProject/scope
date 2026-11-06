@@ -1,5 +1,22 @@
 # Recorded verification
 
+## 1.2.1 maintenance preparation — 2026-11-06
+
+This candidate updates the macOS CI and release build host from `macos-14` to
+`macos-15`. The old macOS job on main
+[failed before executing steps](https://github.com/dalkedev/scope/actions/runs/42097291143)
+with `The configuration 'macos-14-arm64-us-default' is not supported`.
+Windows and Linux jobs from that run passed. This infrastructure failure does
+not establish an application or test failure.
+
+Application/npm/Cargo/Tauri versions are prepared as 1.2.1. External dependency
+versions and application code are unchanged. The macOS runner change does not
+change application deployment-target settings. Exact-head CI, native packaging and
+final asset checks remain release gates; this preparation record does not claim
+new interactive desktop/device validation. The macOS package remains ad-hoc
+signed without Apple notarization. Windows/Linux interactive behavior remains
+experimental, and Intel macOS is unverified.
+
 ## 1.2.0 release preparation — 2026-11-05
 
 Local checks on the combined `release/1.2.0` candidate used macOS arm64,

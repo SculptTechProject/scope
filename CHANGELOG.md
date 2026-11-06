@@ -4,7 +4,14 @@ User-visible changes are recorded here. Back up important captures before upgrad
 
 ## Unreleased
 
-## 1.2.0 — release candidate
+## 1.2.1 — 2026-11-06
+
+- Move macOS CI and release packaging to the supported macOS 15 arm64 runner.
+  This changes the build host and leaves application deployment-target settings unchanged.
+- Refresh release instructions and the current README to distinguish published
+  1.2.0 builds from the 1.2.1 maintenance update.
+
+## 1.2.0 — 2026-11-05
 
 - Reusable offline HAR comparison composite Action with JSON, HTML and JUnit
   outputs, minimized labels by default and explicit clean/regression/invalid
