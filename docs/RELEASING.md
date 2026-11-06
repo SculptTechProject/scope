@@ -126,6 +126,11 @@ before the latest source/notice changes.
 
 ## CI and draft workflow
 
+Both desktop build matrices use `macos-15` (arm64), `windows-2022` (x64) and
+`ubuntu-22.04` (x64). GitHub retired the `macos-14` runner on November 2, 2026;
+use a supported runner label when updating either workflow. This build-host
+selection does not change the application's minimum supported macOS version.
+
 `checks.yml` runs on pushes and pull requests using explicit runner labels,
 commit-pinned actions and locked package dependencies. It checks Rust formatting,
 workspace tests, the release filter, setup integrity tests, npm security findings
