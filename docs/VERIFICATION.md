@@ -1,5 +1,8 @@
 # Recorded verification
 
+For the separate opt-in archive measurement harness, result provenance and proposed
+bounded writer, see [Archive responsiveness](ARCHIVE_RESPONSIVENESS.md).
+
 ## Concurrent rule fixture follow-up — 2026-11-06
 
 At `2ada212`, the [Windows job](https://github.com/dalkedev/scope/actions/runs/42281855023/job/128112730439)
