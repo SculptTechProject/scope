@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use md5::{Digest, Md5};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -75,11 +74,15 @@ struct Recovery {
     server_pid: Option<u32>,
     ca_hash: Option<String>,
     root_shell: bool,
+    #[serde(default)]
+    target_spawn_pending: bool,
+    #[serde(default)]
+    target_pid: Option<u32>,
 }
 
 struct Active {
     recovery: Recovery,
-    worker: Option<Child>,
+    worker: Option<Worker>,
 }
 struct Inner {
     runtime: PathBuf,
@@ -88,6 +91,7 @@ struct Inner {
     operation: AsyncMutex<()>,
     active: AsyncMutex<Option<Active>>,
     worker_generation: AtomicU64,
+    recovery_io: Mutex<()>,
 }
 #[derive(Clone)]
 pub struct DeviceManager {
@@ -118,6 +122,7 @@ impl DeviceManager {
                 operation: AsyncMutex::new(()),
                 active: AsyncMutex::new(None),
                 worker_generation: AtomicU64::new(0),
+                recovery_io: Mutex::new(()),
             }),
         }
     }
@@ -261,12 +266,7 @@ impl DeviceManager {
         if !["proxy", "frida"].contains(&mode.as_str()) {
             bail!("Mode must be proxy or frida");
         }
-        for value in &profile {
-            if !["proxy", "certificate", "unpinning", "root", "system-ca"].contains(&value.as_str())
-            {
-                bail!("Unknown instrumentation profile: {value}");
-            }
-        }
+        let profile = normalize_profiles(profile)?;
         if proxy_port == 0 {
             bail!("Proxy port must be greater than zero");
         }
@@ -350,6 +350,8 @@ impl DeviceManager {
             server_pid: None,
             ca_hash: None,
             root_shell,
+            target_spawn_pending: false,
+            target_pid: None,
         };
         *self.inner.status.lock().unwrap() = DeviceStatus {
             running: false,
@@ -367,33 +369,18 @@ impl DeviceManager {
             self.log(format!("ADB reverse: device 127.0.0.1:{proxy_port} → Scope localhost:{proxy_port}"));
             let worker = if mode == "proxy" {
                 self.log("Proxy mode is DEVICE-WIDE. The selected package is launched, but Android may route other applications through this proxy.");
-                if rooted {
-                    let hash = certificate_hash(&ca_cert)?;
-                    let existing = self.root_command(&state, &format!("cat /apex/com.android.conscrypt/cacerts/{hash}.0 2>/dev/null || cat /system/etc/security/cacerts/{hash}.0 2>/dev/null || true")).await?;
-                    if !existing.trim().is_empty() && existing.trim() != fs::read_to_string(&ca_cert)?.trim() {
-                        bail!("An existing Android CA uses the same subject hash. Scope will not overwrite it");
-                    }
-                    if existing.trim().is_empty() {
-                    // Record the exact certificate before attempting injection so partial setup is recoverable.
-                    state.ca_hash = Some(hash);
-                    self.save_recovery(&state)?;
-                    self.install_ca(&state, &ca_cert).await?;
-                    } else {
-                        self.log("Scope CA was already present; it will be preserved on Stop");
-                    }
-                } else {
-                    self.log("No root: HTTP capture is available. HTTPS requires the app to trust Scope's CA manually; certificate pinning remains active.");
-                }
+                self.log("HTTPS requires manually configured application trust. System proxy mode does not install a CA or bypass pinning.");
                 self.command(&state.serial, &["shell", "settings", "put", "global", "http_proxy", &format!("127.0.0.1:{proxy_port}")]).await?;
                 self.launch(&state).await?;
-                if state.ca_hash.is_some() { self.verify_ca(&state, &ca_cert).await?; }
                 (None, None)
             } else {
                 self.log("Frida mode instruments the selected application process only; Java HTTP stacks are supported. Native TLS, child processes and QUIC are not guaranteed.");
                 let (abi, version) = frida_preflight.as_ref().context("Missing Frida preflight")?;
                 let address = self.prepare_frida_server(&mut state, abi, version).await?;
                 self.save_recovery(&state)?;
-                let (worker, live) = self.spawn_worker(&state, &ca_cert, &profile, address, generation).await?;
+                let worker = self.spawn_worker(&mut state, &ca_cert, &profile, address, generation).await?;
+                let live = worker.live.clone();
+                state = worker.observation.lock().unwrap().recovery.clone();
                 (Some(worker), Some(live))
             };
             Ok::<_, anyhow::Error>(worker)
@@ -419,7 +406,11 @@ impl DeviceManager {
             }
             Err(error) => {
                 self.log(format!("Setup failed: {error:#}"));
-                let cleanup = self.cleanup(&state).await;
+                let cleanup = if state.target_spawn_pending {
+                    Err(anyhow::anyhow!("Target process cleanup is unconfirmed; recovery retained. Press Stop to reconcile the recorded PID, or manually reconcile an unknown spawn"))
+                } else {
+                    self.cleanup(&state).await
+                };
                 let mut status = self.inner.status.lock().unwrap();
                 status.running = false;
                 status.message = match cleanup {
@@ -474,64 +465,6 @@ impl DeviceManager {
             bail!("Android could not launch application: {result}");
         }
         self.log(format!("Launched {}", state.package));
-        Ok(())
-    }
-
-    async fn install_ca(&self, state: &Recovery, cert: &std::path::Path) -> Result<()> {
-        let hash = state.ca_hash.as_ref().context("Missing CA hash")?;
-        let remote_cert = format!("/data/local/tmp/scope-{hash}.0");
-        let remote_script = "/data/local/tmp/scope-install-ca.sh";
-        let script = include_str!("../../../resources/device/install-system-ca.template.sh")
-            .replace("htk-ca-copy", "scope-ca-copy")
-            .replace("${certificatePath}", &remote_cert)
-            .replace("${injectionScriptPath}", remote_script);
-        // The template moves the input basename into cacerts: it must be <subject_hash>.0.
-        let script = script.replace(
-            &format!("mv {remote_cert} /system/etc/security/cacerts/"),
-            &format!("cp {remote_cert} /system/etc/security/cacerts/{hash}.0"),
-        );
-        let path = self.inner.runtime.join("install-system-ca.sh");
-        fs::write(&path, script)?;
-        self.command(
-            &state.serial,
-            &["push", &cert.to_string_lossy(), &remote_cert],
-        )
-        .await?;
-        self.command(
-            &state.serial,
-            &["push", &path.to_string_lossy(), remote_script],
-        )
-        .await?;
-        let result = self
-            .root_command(state, &format!("sh {remote_script}"))
-            .await?;
-        if !result.contains("System cert successfully injected") {
-            bail!("System CA injection was not confirmed");
-        }
-        self.log(format!(
-            "Temporary Scope CA {hash}.0 injected into Android trust stores; removed on Stop"
-        ));
-        Ok(())
-    }
-
-    async fn verify_ca(&self, state: &Recovery, cert: &PathBuf) -> Result<()> {
-        let pid = self
-            .command(&state.serial, &["shell", "pidof", &state.package])
-            .await?;
-        let pid = pid
-            .split_whitespace()
-            .next()
-            .context("Launched app PID was not found")?;
-        if !pid.bytes().all(|c| c.is_ascii_digit()) {
-            bail!("Invalid application PID");
-        }
-        let hash = state.ca_hash.as_ref().context("Missing CA hash")?;
-        let command = format!("nsenter --mount=/proc/{pid}/ns/mnt -- cat /apex/com.android.conscrypt/cacerts/{hash}.0 || nsenter --mount=/proc/{pid}/ns/mnt -- cat /system/etc/security/cacerts/{hash}.0");
-        let installed = self.root_command(state, &command).await?;
-        if installed.trim() != fs::read_to_string(cert)?.trim() {
-            bail!("Scope CA was not visible in the selected app's mount namespace");
-        }
-        self.log("Scope CA verified in the selected application's mount namespace");
         Ok(())
     }
 
@@ -633,12 +566,12 @@ impl DeviceManager {
 
     async fn spawn_worker(
         &self,
-        state: &Recovery,
+        state: &mut Recovery,
         cert: &PathBuf,
         profile: &[String],
         address: Option<String>,
         generation: u64,
-    ) -> Result<(Child, Arc<AtomicBool>)> {
+    ) -> Result<Worker> {
         let mut command = worker_command(&self.inner.runtime);
         command
             .args([
@@ -655,7 +588,7 @@ impl DeviceManager {
         if let Some(address) = address {
             command.args(["--address", &address]);
         }
-        for profile in profile.iter().filter(|v| v.as_str() != "system-ca") {
+        for profile in profile {
             command.args(["--profile", profile]);
         }
         command
@@ -665,55 +598,118 @@ impl DeviceManager {
             .kill_on_drop(true);
         #[cfg(windows)]
         command.creation_flags(0x08000000);
-        let mut child = command.spawn().context("Cannot start Frida worker; set SCOPE_PYTHON to a Python executable with frida installed")?;
+        // Persist uncertainty before a worker can attempt a remote spawn, including a host crash.
+        state.target_spawn_pending = true;
+        self.save_recovery(state)?;
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                state.target_spawn_pending = false;
+                self.save_recovery(state)?;
+                return Err(error).context("Cannot start Frida worker; set SCOPE_PYTHON to a Python executable with frida installed");
+            }
+        };
         let stdout = child.stdout.take().context("Missing Frida worker stdout")?;
         let stderr = child.stderr.take().context("Missing Frida worker stderr")?;
         let (sender, receiver) = oneshot::channel();
         let live = Arc::new(AtomicBool::new(true));
-        let worker_live = live.clone();
-        tokio::spawn(monitor_worker_output(
+        let observation = Arc::new(Mutex::new(WorkerObservation::new(
+            state.clone(),
+            profile.to_vec(),
+        )));
+        let monitor = tokio::spawn(monitor_worker_output(
             self.clone(),
             stdout,
             generation,
-            worker_live,
+            live.clone(),
             sender,
+            observation.clone(),
         ));
         let manager = self.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                manager.log(line);
+                if manager.inner.worker_generation.load(Ordering::SeqCst) == generation {
+                    manager.log(line);
+                }
             }
         });
+        let mut worker = Worker {
+            child,
+            live,
+            observation,
+            monitor,
+        };
         match tokio::time::timeout(Duration::from_secs(40), receiver).await {
-            Ok(Ok(Ok(()))) => Ok((child, live)),
+            Ok(Ok(Ok(()))) => Ok(worker),
             result => {
-                drop(child.stdin.take());
-                let _ = child.kill().await;
-                match result {
-                    Ok(Ok(Err(message))) => bail!(message),
-                    _ => bail!("Frida worker did not confirm hook readiness within 40 seconds"),
+                let teardown = self.finish_worker(&mut worker).await;
+                *state = worker.observation.lock().unwrap().recovery.clone();
+                self.invalidate_worker();
+                if teardown.is_ok() {
+                    state.target_spawn_pending = false;
+                    self.save_recovery(state)?;
                 }
+                let cause = match result {
+                    Ok(Ok(Err(message))) => message,
+                    _ => "Frida worker did not confirm hook readiness within 40 seconds".into(),
+                };
+                bail!(
+                    "{cause}; teardown: {}",
+                    teardown
+                        .err()
+                        .map(|e| e.to_string())
+                        .unwrap_or_else(|| "confirmed".into())
+                );
             }
         }
     }
 
+    // Never holds operation/recovery locks while awaiting stdout. The monitor must drain the final receipt.
+    async fn finish_worker(&self, worker: &mut Worker) -> Result<()> {
+        if let Some(mut stdin) = worker.child.stdin.take() {
+            let _ = stdin.write_all(b"stop\n").await;
+        }
+        let exit = match tokio::time::timeout(Duration::from_secs(12), worker.child.wait()).await {
+            Ok(result) => result.context("Cannot reap Frida worker"),
+            Err(_) => {
+                let _ = worker.child.kill().await;
+                Err(anyhow::anyhow!("Frida worker exceeded 12-second cleanup grace; target termination is unconfirmed"))
+            }
+        };
+        let drained = tokio::time::timeout(Duration::from_secs(2), &mut worker.monitor).await;
+        if !matches!(drained, Ok(Ok(()))) {
+            worker.monitor.abort();
+            bail!("Frida worker output did not drain; target termination is unconfirmed");
+        }
+        let exit = exit?;
+        if !exit.success() {
+            bail!("Frida worker failed ({exit}); recovery retained");
+        }
+        let observed = worker.observation.lock().unwrap();
+        observed.confirm_stopped()?;
+        Ok(())
+    }
+
+    fn invalidate_worker(&self) {
+        let _io = self.inner.recovery_io.lock().unwrap();
+        self.inner.worker_generation.fetch_add(1, Ordering::SeqCst);
+    }
+
     pub async fn stop(&self) -> Result<DeviceStatus> {
         let _operation = self.inner.operation.lock().await;
-        // Ignore late stdout/EOF notifications from a worker being intentionally stopped.
-        self.inner.worker_generation.fetch_add(1, Ordering::SeqCst);
         let active = self.inner.active.lock().await.take();
         let state = if let Some(mut active) = active {
-            if let Some(mut child) = active.worker.take() {
-                if let Some(mut stdin) = child.stdin.take() {
-                    let _ = stdin.write_all(b"stop\n").await;
+            if let Some(mut worker) = active.worker.take() {
+                let result = self.finish_worker(&mut worker).await;
+                active.recovery = worker.observation.lock().unwrap().recovery.clone();
+                self.invalidate_worker();
+                if let Err(error) = result {
+                    self.cleanup_failed(&active.recovery, &error);
+                    return Err(error);
                 }
-                if tokio::time::timeout(Duration::from_secs(5), child.wait())
-                    .await
-                    .is_err()
-                {
-                    let _ = child.kill().await;
-                }
+                active.recovery.target_spawn_pending = false;
+                self.save_recovery(&active.recovery)?;
             }
             Some(active.recovery)
         } else if self.recovery_path().is_file() {
@@ -725,24 +721,70 @@ impl DeviceManager {
         };
         if let Some(state) = state {
             if let Err(error) = self.cleanup(&state).await {
-                let mut status = self.inner.status.lock().unwrap();
-                status.running = false;
-                status.message = format!(
-                    "Cleanup incomplete. Reconnect {} and press Stop again: {error:#}",
-                    state.serial
-                );
+                self.cleanup_failed(&state, &error);
                 return Err(error);
             }
         }
         let mut status = self.inner.status.lock().unwrap();
         status.running = false;
-        status.message = "Device settings restored; saved captures remain available".into();
+        status.message = "Device settings restored; instrumented process ended when applicable; saved captures remain available".into();
         Ok(status.clone())
+    }
+
+    fn cleanup_failed(&self, state: &Recovery, error: &anyhow::Error) {
+        let mut status = self.inner.status.lock().unwrap();
+        status.running = false;
+        status.message = format!(
+            "Cleanup incomplete. Reconnect {} and press Stop again: {error:#}",
+            state.serial
+        );
+    }
+
+    async fn reconcile_target(&self, state: &Recovery) -> Result<()> {
+        if !state.target_spawn_pending {
+            return Ok(());
+        }
+        let pid = state.target_pid.context("Spawn was attempted without a recorded PID. Manually reconcile the app/process on the device; Scope cannot safely infer or kill it. Recovery retained")?;
+        if pid == 0 {
+            bail!("Invalid recorded target PID; recovery retained");
+        }
+        // Require a readable root procfs view. A package pid lookup or worker exit cannot establish absence.
+        let probe = format!(
+            r#"if [ "$(id -u)" != 0 ] || [ ! -r /proc/1/stat ] || [ ! -r /proc/self/stat ]; then
+ echo UNKNOWN
+elif [ -d /proc/{pid} ]; then
+ echo PRESENT
+elif mounts=$(cat /proc/mounts 2>/dev/null) && entries=$(ls /proc 2>/dev/null); then
+ case "$mounts" in
+ *hidepid=*) echo UNKNOWN;;
+ *) found=0; init=0
+    for entry in $entries; do
+     [ "$entry" = "{pid}" ] && found=1
+     [ "$entry" = 1 ] && init=1
+    done
+    if [ "$found" = 1 ]; then echo PRESENT
+    elif [ "$init" = 1 ] && [ ! -e /proc/{pid} ]; then echo ABSENT
+    else echo UNKNOWN; fi;;
+ esac
+else echo UNKNOWN; fi"#
+        );
+        let result = self
+            .root_command(state, &probe)
+            .await
+            .context("Cannot inspect recorded target process; recovery retained")?;
+        if result.trim() != "ABSENT" {
+            bail!("Recorded target PID {pid} is present or its state is inaccessible. Scope will not kill a saved or reused PID; manually reconcile it and retry Stop. Recovery retained");
+        }
+        self.log(format!(
+            "Recorded target PID {pid} is absent in the observed root procfs view"
+        ));
+        Ok(())
     }
 
     async fn cleanup(&self, state: &Recovery) -> Result<()> {
         // Validate every persisted field before the first cleanup command.
         diagnostics::validate_recovery(state)?;
+        self.reconcile_target(state).await?;
         let mut errors = vec![];
         if let Some(old) = &state.previous_proxy {
             let current = self
@@ -874,6 +916,7 @@ impl DeviceManager {
         if !errors.is_empty() {
             bail!("{}", errors.join("; "));
         }
+        let _io = self.inner.recovery_io.lock().unwrap();
         if self.recovery_path().exists() {
             fs::remove_file(self.recovery_path())?;
         }
@@ -908,6 +951,11 @@ impl DeviceManager {
         )
     }
     fn save_recovery(&self, state: &Recovery) -> Result<()> {
+        let _io = self.inner.recovery_io.lock().unwrap();
+        self.write_recovery(state)
+    }
+
+    fn write_recovery(&self, state: &Recovery) -> Result<()> {
         fs::create_dir_all(&self.inner.runtime)?;
         let temporary = self.inner.runtime.join("device-recovery.tmp");
         fs::write(&temporary, serde_json::to_vec_pretty(state)?)?;
@@ -916,11 +964,134 @@ impl DeviceManager {
     }
 
     fn materialize(&self) -> Result<()> {
-        fs::create_dir_all(self.inner.runtime.join("frida/android"))?;
+        fs::create_dir_all(self.inner.runtime.join("frida"))?;
         for (path, content) in ASSETS {
             fs::write(self.inner.runtime.join(path), content)?;
         }
         Ok(())
+    }
+}
+
+const ENGINE: &str = "scope-java-v1";
+
+fn normalize_profiles(profiles: Vec<String>) -> Result<Vec<String>> {
+    let profiles = if profiles.is_empty() {
+        vec!["proxy".into(), "certificate".into(), "unpinning".into()]
+    } else {
+        profiles
+    };
+    let mut selected = Vec::new();
+    for profile in profiles {
+        if !["proxy", "certificate", "unpinning"].contains(&profile.as_str()) {
+            bail!("Unsupported instrumentation profile: {profile}");
+        }
+        if !selected.contains(&profile) {
+            selected.push(profile);
+        }
+    }
+    if selected.iter().any(|p| p == "unpinning") && !selected.iter().any(|p| p == "certificate") {
+        bail!("unpinning profile requires certificate");
+    }
+    // Match the worker/engine canonical order while retaining exactly the explicit selection.
+    Ok(["proxy", "certificate", "unpinning"]
+        .into_iter()
+        .filter(|profile| selected.iter().any(|selected| selected == profile))
+        .map(String::from)
+        .collect())
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum WorkerEvent {
+    Spawned {
+        engine: String,
+        pid: u32,
+    },
+    Ready {
+        engine: String,
+        pid: u32,
+        profiles: Vec<String>,
+        capabilities: HashMap<String, Vec<String>>,
+    },
+    Stopped {
+        engine: String,
+        pid: Option<u32>,
+        #[serde(rename = "spawnAttempted")]
+        spawn_attempted: bool,
+        #[serde(rename = "cleanupComplete")]
+        cleanup_complete: bool,
+        #[serde(rename = "processTerminated")]
+        process_terminated: bool,
+    },
+    Error {
+        message: String,
+    },
+    Detached {
+        message: String,
+    },
+    Log {
+        message: serde_json::Value,
+    },
+}
+
+struct Worker {
+    child: Child,
+    live: Arc<AtomicBool>,
+    observation: Arc<Mutex<WorkerObservation>>,
+    monitor: tokio::task::JoinHandle<()>,
+}
+struct WorkerObservation {
+    recovery: Recovery,
+    profiles: Vec<String>,
+    spawned: bool,
+    terminal: bool,
+    failure: Option<String>,
+    stopped: bool,
+}
+impl WorkerObservation {
+    fn new(recovery: Recovery, profiles: Vec<String>) -> Self {
+        Self {
+            recovery,
+            profiles,
+            spawned: false,
+            terminal: false,
+            failure: None,
+            stopped: false,
+        }
+    }
+    fn confirm_stopped(&self) -> Result<()> {
+        if let Some(error) = &self.failure {
+            bail!("{error}; recovery retained");
+        }
+        if !self.stopped {
+            bail!("Missing matching target-termination acknowledgment; recovery retained");
+        }
+        Ok(())
+    }
+    fn ready(
+        &self,
+        engine: &str,
+        pid: u32,
+        profiles: &[String],
+        capabilities: &HashMap<String, Vec<String>>,
+    ) -> bool {
+        !self.terminal
+            && self.spawned
+            && engine == ENGINE
+            && self.recovery.target_pid == Some(pid)
+            && profiles == self.profiles
+            && capabilities.len() == profiles.len()
+            && profiles.iter().all(|profile| {
+                let required = match profile.as_str() {
+                    "proxy" => "java-url",
+                    "certificate" => "sslcontext-scope-ca",
+                    "unpinning" => "okhttp3-certificate-pinner",
+                    _ => return false,
+                };
+                capabilities
+                    .get(profile)
+                    .is_some_and(|installed| installed.iter().any(|item| item == required))
+            })
     }
 }
 
@@ -930,51 +1101,103 @@ async fn monitor_worker_output<R: tokio::io::AsyncRead + Unpin>(
     generation: u64,
     live: Arc<AtomicBool>,
     sender: oneshot::Sender<std::result::Result<(), String>>,
+    observation: Arc<Mutex<WorkerObservation>>,
 ) {
     let mut sender = Some(sender);
     let mut lines = BufReader::new(stdout).lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
-            match value.get("kind").and_then(|v| v.as_str()).unwrap_or("log") {
-                "ready" => {
+        let _io = manager.inner.recovery_io.lock().unwrap();
+        if manager.inner.worker_generation.load(Ordering::SeqCst) != generation {
+            continue;
+        }
+        let mut observed = observation.lock().unwrap();
+        let event = serde_json::from_str::<WorkerEvent>(&line);
+        let mut error = None;
+        match event {
+            Ok(WorkerEvent::Spawned { engine, pid })
+                if engine == ENGINE && pid > 0 && !observed.spawned && !observed.terminal =>
+            {
+                observed.recovery.target_pid = Some(pid);
+                observed.spawned = true;
+                if manager.recovery_path().is_file() {
+                    if let Err(failure) = manager.write_recovery(&observed.recovery) {
+                        error = Some(format!("Cannot persist spawned target PID: {failure}"));
+                    }
+                } else {
+                    error =
+                        Some("Recovery record disappeared before target PID persistence".into());
+                }
+            }
+            Ok(WorkerEvent::Ready {
+                engine,
+                pid,
+                profiles,
+                capabilities,
+            }) => {
+                if observed.ready(&engine, pid, &profiles, &capabilities) {
                     if let Some(sender) = sender.take() {
                         let _ = sender.send(Ok(()));
                     }
-                }
-                "error" => {
-                    let message = value
-                        .get("message")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Frida worker failed")
-                        .to_string();
-                    if let Some(sender) = sender.take() {
-                        let _ = sender.send(Err(message.clone()));
-                    }
-                    manager.log(message);
-                    live.store(false, Ordering::SeqCst);
-                    manager.worker_ended(generation, "Frida worker reported an error; press Stop to restore the recorded device state");
-                }
-                "stopped" | "detached" => {
-                    if let Some(sender) = sender.take() {
-                        let detail = value
-                            .get("message")
-                            .and_then(|value| value.as_str())
-                            .unwrap_or("device session ended");
-                        let _ = sender.send(Err(format!("Frida detached before hook readiness: {detail}. Check Android compatibility and the selected app's process")));
-                    }
-                    live.store(false, Ordering::SeqCst);
-                    manager.worker_ended(
-                        generation,
-                        "Frida worker detached; press Stop to restore the recorded device state",
+                } else {
+                    error = Some(
+                        "Invalid engine readiness/capability receipt or terminal session".into(),
                     );
                 }
-                _ => manager.log(
-                    value
-                        .get("message")
-                        .map(|v| v.as_str().unwrap_or("Frida diagnostic"))
-                        .unwrap_or("Frida diagnostic"),
-                ),
             }
+            Ok(WorkerEvent::Stopped {
+                engine,
+                pid,
+                spawn_attempted,
+                cleanup_complete,
+                process_terminated,
+            }) => {
+                let valid = engine == ENGINE
+                    && cleanup_complete
+                    && if spawn_attempted {
+                        observed.spawned
+                            && pid == observed.recovery.target_pid
+                            && process_terminated
+                    } else {
+                        !observed.spawned && pid.is_none() && !process_terminated
+                    };
+                if valid {
+                    observed.stopped = true;
+                } else {
+                    error = Some("Invalid target-termination acknowledgment".into());
+                }
+                observed.terminal = true;
+                if let Some(sender) = sender.take() {
+                    let _ = sender.send(Err("Frida stopped before hook readiness".into()));
+                }
+            }
+            Ok(WorkerEvent::Error { message }) => error = Some(message),
+            Ok(WorkerEvent::Detached { message }) => {
+                observed.terminal = true;
+                if let Some(sender) = sender.take() {
+                    let _ = sender.send(Err(format!(
+                        "Frida detached before hook readiness: {message}"
+                    )));
+                }
+            }
+            Ok(WorkerEvent::Log { message }) => {
+                manager.log(message.as_str().unwrap_or("Frida diagnostic"))
+            }
+            _ => error = Some("Invalid Frida worker protocol receipt".into()),
+        }
+        if let Some(message) = error {
+            observed.terminal = true;
+            observed.failure = Some(message.clone());
+            if let Some(sender) = sender.take() {
+                let _ = sender.send(Err(message.clone()));
+            }
+            manager.log(message);
+        }
+        if observed.terminal {
+            live.store(false, Ordering::SeqCst);
+            manager.worker_ended(
+                generation,
+                "Frida worker ended; press Stop to reconcile the recorded device state",
+            );
         }
     }
     if let Some(sender) = sender.take() {
@@ -1093,55 +1316,375 @@ fn frida_arch(abi: &str) -> Option<&'static str> {
     }
 }
 
-fn certificate_hash(path: &PathBuf) -> Result<String> {
-    let pem = pem::parse(fs::read(path)?).context("Cannot parse Scope public CA")?;
-    let (_, cert) = x509_parser::parse_x509_certificate(pem.contents())
-        .map_err(|e| anyhow::anyhow!("Cannot parse Scope CA: {e}"))?;
-    let hash = Md5::digest(cert.subject().as_raw());
-    Ok(format!(
-        "{:08x}",
-        u32::from_le_bytes(hash[..4].try_into().unwrap())
-    ))
-}
-
 const ASSETS: &[(&str, &str)] = &[
     (
         "frida_worker.py",
         include_str!("../../../resources/device/frida_worker.py"),
     ),
     (
-        "frida/config-template.js",
-        include_str!("../../../resources/frida/config-template.js"),
+        "frida/scope-engine.js",
+        include_str!("../../../resources/frida/scope-engine.js"),
     ),
     (
         "frida/frida-java-bridge.js",
         include_str!("../../../resources/frida/frida-java-bridge.js"),
-    ),
-    (
-        "frida/android/android-proxy-override.js",
-        include_str!("../../../resources/frida/android/android-proxy-override.js"),
-    ),
-    (
-        "frida/android/android-system-certificate-injection.js",
-        include_str!("../../../resources/frida/android/android-system-certificate-injection.js"),
-    ),
-    (
-        "frida/android/android-certificate-unpinning.js",
-        include_str!("../../../resources/frida/android/android-certificate-unpinning.js"),
-    ),
-    (
-        "frida/android/android-certificate-unpinning-fallback.js",
-        include_str!("../../../resources/frida/android/android-certificate-unpinning-fallback.js"),
-    ),
-    (
-        "frida/android/android-disable-root-detection.js",
-        include_str!("../../../resources/frida/android/android-disable-root-detection.js"),
     ),
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn test_observation() -> Arc<Mutex<WorkerObservation>> {
+        Arc::new(Mutex::new(WorkerObservation::new(
+            Recovery {
+                serial: "fixture-01".into(),
+                package: "com.scope.demo".into(),
+                mode: "frida".into(),
+                port: 17890,
+                previous_proxy: None,
+                previous_reverse: None,
+                forward_port: None,
+                server_pid: None,
+                ca_hash: None,
+                root_shell: true,
+                target_spawn_pending: true,
+                target_pid: None,
+            },
+            vec!["proxy".into()],
+        )))
+    }
+    #[test]
+    fn old_recovery_defaults_do_not_invent_target_ownership() {
+        let state: Recovery = serde_json::from_str(r#"{"serial":"fixture-01","package":"com.scope.demo","mode":"proxy","port":17890,"previousProxy":null,"previousReverse":null,"forwardPort":null,"serverPid":null,"caHash":"1234abcd","rootShell":true}"#).unwrap();
+        assert!(!state.target_spawn_pending);
+        assert_eq!(state.target_pid, None);
+        assert_eq!(state.ca_hash.as_deref(), Some("1234abcd"));
+    }
+
+    #[test]
+    fn explicit_profiles_remain_exact_and_defaults_are_compatible() {
+        assert_eq!(
+            normalize_profiles(vec![]).unwrap(),
+            ["proxy", "certificate", "unpinning"]
+        );
+        assert_eq!(
+            normalize_profiles(vec!["proxy".into(), "proxy".into()]).unwrap(),
+            ["proxy"]
+        );
+        assert_eq!(
+            normalize_profiles(vec!["certificate".into()]).unwrap(),
+            ["certificate"]
+        );
+        assert_eq!(
+            normalize_profiles(vec!["certificate".into(), "proxy".into()]).unwrap(),
+            ["proxy", "certificate"]
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn worker_stop_drains_and_requires_matching_successful_receipts() {
+        // Run actual child pipes and the production monitor/teardown, including final-line races.
+        let owned = r#"{"kind":"stopped","engine":"scope-java-v1","pid":42,"spawnAttempted":true,"cleanupComplete":true,"processTerminated":true}"#;
+        let safe = r#"{"kind":"stopped","engine":"scope-java-v1","pid":null,"spawnAttempted":false,"cleanupComplete":true,"processTerminated":false}"#;
+        let spawned = r#"{"kind":"spawned","engine":"scope-java-v1","pid":42}"#;
+        let wrong = owned.replace("42", "43");
+        let error = r#"{"kind":"error","message":"cleanup uncertain"}"#;
+        for (spawn, receipt, exit, success) in [
+            (spawned, owned.to_owned(), 0, true),
+            ("", safe.to_owned(), 0, true),
+            (spawned, "".into(), 0, false),
+            (spawned, wrong, 0, false),
+            (spawned, safe.to_owned(), 0, false),
+            (spawned, owned.to_owned(), 1, false),
+            (spawned, format!("{error}\n{owned}"), 0, false),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let manager = DeviceManager::new(directory.path().into());
+            let observation = test_observation();
+            manager
+                .save_recovery(&observation.lock().unwrap().recovery)
+                .unwrap();
+            let before_stop = if spawn.is_empty() {
+                String::new()
+            } else {
+                format!("printf '%s\\n' {}; ", adb::quote(spawn))
+            };
+            let script = format!(
+                "{before_stop}read reply; printf '%s\\n' {}; exit {exit}",
+                adb::quote(&receipt)
+            );
+            let mut child = Command::new("sh")
+                .arg("-c")
+                .arg(script)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let stdout = child.stdout.take().unwrap();
+            let live = Arc::new(AtomicBool::new(true));
+            let (sender, _receiver) = oneshot::channel();
+            let monitor = tokio::spawn(monitor_worker_output(
+                manager.clone(),
+                stdout,
+                0,
+                live.clone(),
+                sender,
+                observation.clone(),
+            ));
+            let mut worker = Worker {
+                child,
+                live,
+                observation,
+                monitor,
+            };
+            let result = manager.finish_worker(&mut worker).await;
+            assert_eq!(result.is_ok(), success, "{receipt}: {result:?}");
+            let saved: Recovery =
+                serde_json::from_slice(&fs::read(manager.recovery_path()).unwrap()).unwrap();
+            assert!(
+                saved.target_spawn_pending,
+                "receipt alone must not clear recovery before exit/drain validation"
+            );
+            if !spawn.is_empty() {
+                assert_eq!(saved.target_pid, Some(42));
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn full_worker_cleanup_budget_is_allowed_before_killing() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        let observation = test_observation();
+        manager
+            .save_recovery(&observation.lock().unwrap().recovery)
+            .unwrap();
+        let mut child = Command::new("sh").args(["-c", "read reply; sleep 9; printf '%s\\n' '{\"kind\":\"stopped\",\"engine\":\"scope-java-v1\",\"pid\":null,\"spawnAttempted\":false,\"cleanupComplete\":true,\"processTerminated\":false}'"]).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let live = Arc::new(AtomicBool::new(true));
+        let (sender, _receiver) = oneshot::channel();
+        let monitor = tokio::spawn(monitor_worker_output(
+            manager.clone(),
+            stdout,
+            0,
+            live.clone(),
+            sender,
+            observation.clone(),
+        ));
+        let mut worker = Worker {
+            child,
+            live,
+            observation,
+            monitor,
+        };
+        manager.finish_worker(&mut worker).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn recovery_only_accepts_observed_known_pid_absence_and_preserves_legacy_ca_cleanup() {
+        use std::os::unix::fs::PermissionsExt;
+        for (pid, proc_state, succeeds) in [
+            (Some(42), "ABSENT", true),
+            (Some(42), "PRESENT", false),
+            (Some(42), "UNKNOWN", false),
+            (None, "ABSENT", false),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let log = directory.path().join("commands.log");
+            let adb_path = directory.path().join("fake-adb");
+            fs::write(&adb_path, format!("#!/bin/sh\nprintf '%s\\n' \"$*\" >> {}\ncase \"$*\" in\n*'/proc/42'*) echo {proc_state};;\n*) exit 0;;\nesac\n", adb::quote(&log.to_string_lossy()))).unwrap();
+            fs::set_permissions(&adb_path, fs::Permissions::from_mode(0o755)).unwrap();
+            let mut manager = DeviceManager::new(directory.path().into());
+            Arc::get_mut(&mut manager.inner).unwrap().adb = adb_path;
+            let mut state = test_observation().lock().unwrap().recovery.clone();
+            state.target_pid = pid;
+            state.ca_hash = Some("1234abcd".into());
+            manager.save_recovery(&state).unwrap();
+            assert_eq!(manager.stop().await.is_ok(), succeeds);
+            assert_eq!(manager.recovery_path().exists(), !succeeds);
+            let commands = fs::read_to_string(&log).unwrap_or_default();
+            assert!(!commands.contains("kill 42"));
+            assert!(
+                !commands.contains("pidof com.scope.demo"),
+                "package PID lookup cannot prove target termination"
+            );
+            if succeeds {
+                assert!(commands.contains("rm -f /system/etc/security/cacerts/1234abcd.0"));
+            } else {
+                assert!(!commands.contains("rm -f"));
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn inaccessible_pid_listed_in_procfs_is_not_treated_as_absent() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        for (name, source) in [
+            ("id", "#!/bin/sh\necho 0\n".to_owned()),
+            ("ls", "#!/bin/sh\nprintf '1\\n4294967295\\n'\n".to_owned()),
+            (
+                "adb",
+                format!(
+                    "#!/bin/sh\nPATH={}:$PATH\nexport PATH\nexec sh -c \"$4\"\n",
+                    adb::quote(&directory.path().to_string_lossy())
+                ),
+            ),
+        ] {
+            let path = directory.path().join(name);
+            fs::write(&path, source).unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let mut manager = DeviceManager::new(directory.path().into());
+        Arc::get_mut(&mut manager.inner).unwrap().adb = directory.path().join("adb");
+        let mut state = test_observation().lock().unwrap().recovery.clone();
+        state.target_pid = Some(u32::MAX);
+        assert!(manager.reconcile_target(&state).await.is_err(), "a visible directory entry is evidence of presence even if stat cannot observe the target");
+    }
+
+    #[tokio::test]
+    async fn terminal_error_cannot_be_revived_by_ready_or_late_spawn() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        let observation = test_observation();
+        manager
+            .save_recovery(&observation.lock().unwrap().recovery)
+            .unwrap();
+        let (mut writer, reader) = tokio::io::duplex(4096);
+        let (sender, receiver) = oneshot::channel();
+        let live = Arc::new(AtomicBool::new(true));
+        let task = tokio::spawn(monitor_worker_output(
+            manager.clone(),
+            reader,
+            0,
+            live.clone(),
+            sender,
+            observation.clone(),
+        ));
+        writer.write_all(b"{\"kind\":\"error\",\"message\":\"failed\"}\n{\"kind\":\"spawned\",\"engine\":\"scope-java-v1\",\"pid\":42}\n{\"kind\":\"ready\",\"engine\":\"scope-java-v1\",\"pid\":42,\"profiles\":[\"proxy\"],\"capabilities\":{\"proxy\":[\"java-url\"]}}\n").await.unwrap();
+        drop(writer);
+        assert!(receiver.await.unwrap().is_err());
+        task.await.unwrap();
+        assert!(!live.load(Ordering::SeqCst));
+        assert!(!observation.lock().unwrap().spawned);
+        let saved: Recovery =
+            serde_json::from_slice(&fs::read(manager.recovery_path()).unwrap()).unwrap();
+        assert!(saved.target_spawn_pending);
+        assert_eq!(saved.target_pid, None);
+    }
+
+    #[tokio::test]
+    async fn unsupported_profiles_fail_before_proxy_or_device_probes() {
+        for profiles in [
+            vec!["root"],
+            vec!["system-ca"],
+            vec!["unknown"],
+            vec!["unpinning"],
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let manager = DeviceManager::new(directory.path().into());
+            let error = manager
+                .start(
+                    "fixture-01".into(),
+                    "com.scope.demo".into(),
+                    "frida".into(),
+                    1,
+                    directory.path().join("missing-ca"),
+                    profiles.into_iter().map(String::from).collect(),
+                )
+                .await
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("profile") || error.contains("requires certificate"),
+                "{error}"
+            );
+            assert!(!manager.recovery_path().exists());
+        }
+    }
+
+    #[test]
+    fn materialized_worker_can_construct_only_the_owned_engine() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        manager.materialize().unwrap();
+        assert!(directory.path().join("frida/scope-engine.js").is_file());
+        assert!(directory
+            .path()
+            .join("frida/frida-java-bridge.js")
+            .is_file());
+        assert!(!directory.path().join("frida/config-template.js").exists());
+        assert!(!directory.path().join("frida/android").exists());
+    }
+
+    #[tokio::test]
+    async fn invalid_readiness_never_confirms_startup() {
+        for receipt in [
+            r#"{"kind":"ready"}"#,
+            r#"{"kind":"ready","engine":"other","pid":42,"profiles":["proxy"],"capabilities":{"proxy":["java-url"]}}"#,
+            r#"{"kind":"ready","engine":"scope-java-v1","pid":43,"profiles":["proxy"],"capabilities":{"proxy":["java-url"]}}"#,
+            r#"{"kind":"ready","engine":"scope-java-v1","pid":42,"profiles":["certificate"],"capabilities":{"certificate":["sslcontext-scope-ca"]}}"#,
+            r#"{"kind":"ready","engine":"scope-java-v1","pid":42,"profiles":["proxy"],"capabilities":{"proxy":[]}}"#,
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let manager = DeviceManager::new(directory.path().into());
+            let observation = test_observation();
+            manager
+                .save_recovery(&observation.lock().unwrap().recovery)
+                .unwrap();
+            let (mut writer, reader) = tokio::io::duplex(4096);
+            let (sender, receiver) = oneshot::channel();
+            let task = tokio::spawn(monitor_worker_output(
+                manager,
+                reader,
+                0,
+                Arc::new(AtomicBool::new(true)),
+                sender,
+                observation,
+            ));
+            writer.write_all(format!("{{\"kind\":\"spawned\",\"engine\":\"scope-java-v1\",\"pid\":42}}\n{receipt}\n").as_bytes()).await.unwrap();
+            drop(writer);
+            assert!(receiver.await.unwrap().is_err(), "{receipt}");
+            task.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn late_generation_cannot_replace_or_recreate_recovery() {
+        for saved in [true, false] {
+            let directory = tempfile::tempdir().unwrap();
+            let manager = DeviceManager::new(directory.path().into());
+            manager.inner.worker_generation.store(2, Ordering::SeqCst);
+            if saved {
+                manager
+                    .save_recovery(&test_observation().lock().unwrap().recovery)
+                    .unwrap();
+            }
+            let before = fs::read(manager.recovery_path()).ok();
+            let (mut writer, reader) = tokio::io::duplex(4096);
+            let (sender, _receiver) = oneshot::channel();
+            let task = tokio::spawn(monitor_worker_output(
+                manager.clone(),
+                reader,
+                1,
+                Arc::new(AtomicBool::new(true)),
+                sender,
+                test_observation(),
+            ));
+            writer
+                .write_all(b"{\"kind\":\"spawned\",\"engine\":\"scope-java-v1\",\"pid\":42}\n")
+                .await
+                .unwrap();
+            drop(writer);
+            task.await.unwrap();
+            assert_eq!(fs::read(manager.recovery_path()).ok(), before);
+        }
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn cleanup_checks_live_mapping_ownership_before_mutations() {
@@ -1175,6 +1718,8 @@ mod tests {
                     server_pid: None,
                     ca_hash: None,
                     root_shell: false,
+                    target_spawn_pending: false,
+                    target_pid: None,
                 })
                 .unwrap();
             manager.stop().await.unwrap();
@@ -1226,8 +1771,12 @@ mod tests {
             1,
             live.clone(),
             sender,
+            test_observation(),
         ));
-        writer.write_all(b"{\"kind\":\"ready\"}\n").await.unwrap();
+        manager
+            .save_recovery(&test_observation().lock().unwrap().recovery)
+            .unwrap();
+        writer.write_all(b"{\"kind\":\"spawned\",\"engine\":\"scope-java-v1\",\"pid\":42}\n{\"kind\":\"ready\",\"engine\":\"scope-java-v1\",\"pid\":42,\"profiles\":[\"proxy\"],\"capabilities\":{\"proxy\":[\"java-url\"]}}\n").await.unwrap();
         assert!(receiver.await.unwrap().is_ok());
         drop(writer);
         task.await.unwrap();
@@ -1249,6 +1798,7 @@ mod tests {
             1,
             Arc::new(AtomicBool::new(true)),
             sender,
+            test_observation(),
         ));
         drop(writer);
         task.await.unwrap();
@@ -1266,6 +1816,7 @@ mod tests {
             0,
             Arc::new(AtomicBool::new(true)),
             sender,
+            test_observation(),
         ));
         writer
             .write_all(b"{\"kind\":\"detached\",\"message\":\"process-terminated\"}\n")
@@ -1310,6 +1861,8 @@ mod tests {
             server_pid: None,
             ca_hash: None,
             root_shell: false,
+            target_spawn_pending: false,
+            target_pid: None,
         };
         let mut manager = DeviceManager::new(directory.path().to_owned());
         Arc::get_mut(&mut manager.inner).unwrap().adb = directory.path().join("missing-adb");
@@ -1335,6 +1888,8 @@ mod tests {
             server_pid: None,
             ca_hash: None,
             root_shell: false,
+            target_spawn_pending: false,
+            target_pid: None,
         };
         manager.save_recovery(&state).unwrap();
         let error = manager.stop().await.unwrap_err().to_string();

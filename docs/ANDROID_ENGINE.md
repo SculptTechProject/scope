@@ -1,0 +1,36 @@
+# Scope-owned Android Java engine
+
+The experimental `scope-java-v1` engine uses documented Frida/Java APIs and the unchanged third-party Frida Java bridge. It replaces the imported HTTP Toolkit runtime hooks. The project remains AGPL-3.0-or-later; [notices and bridge provenance](../THIRD_PARTY_NOTICES.md) remain applicable. No legally certified clean-room claim is made.
+
+## Coverage
+
+| Profile | Supported seam | Limits |
+| --- | --- | --- |
+| `proxy` | Java URL openConnection overloads and available OkHttp3 Builder.build | Existing clients, other Java clients and native connections are not covered. |
+| `certificate` | Subsequent SSLContext.init, original basic/extended X509 managers | Existing/default contexts are not covered. Original socket/SSLEngine delegation and hostname verification remain active. |
+| `unpinning` | Enumerated OkHttp3 CertificatePinner List, Certificate[] and Kotlin Function0 signatures | Requires certificate profile; missing/unknown pinner capabilities fail startup. Custom/obfuscated/native pinners are unsupported. |
+
+A separate empty KeyStore contains only the supplied Scope CA, and a real Java TrustManagerFactory performs chain validation. CA constraints, certificate validity, server-leaf checks and original Java exception types bound acceptance. A valid Scope chain can override an original certificate/pin rejection only at the supported seams; unrelated failures and non-Scope chain decisions remain unchanged. No trust-all manager, hostname bypass or expiry bypass is installed. Native TLS, Cronet, QUIC, Flutter, child processes and root hiding are unsupported.
+
+System proxy mode remains device-wide and requires manually configured application trust for HTTPS. Neither mode injects a system CA. Legacy recovery records retain removal of their recorded owned CA.
+
+## Lifecycle
+
+The worker serializes runtime data as JSON, validates profiles before device contact and requires every requested capability before ready. Rust persists attempted-spawn uncertainty before launching the worker and the exact spawned PID before accepting ready. Terminal errors/detach/EOF cannot revive readiness; a prior worker generation cannot write a newer session's state.
+
+Stop ends the exact process spawned by the active worker, then unloads/detaches. This is necessary because created proxy/TLS objects can outlive unhooking. Rust allows 12 seconds for the worker's bounded nine-second cleanup plus scheduling overhead, then drains stdout. A matching successful cleanup/termination receipt and successful worker exit are required before clearing pending cleanup. A receipt proving Stop occurred before any attempted spawn is also accepted without claiming termination.
+
+A failed/timed-out worker or missing acknowledgment retains recovery. After restart, only observed absence of a saved PID in a readable root procfs view can establish that it ended. Present/inaccessible PID state and unknown attempted-spawn completion require manual reconciliation; saved target PIDs are never killed. Existing mapping ownership checks preserve external proxy/reverse/forward changes.
+
+## Evidence and acceptance
+
+| Gate | Current evidence |
+| --- | --- |
+| Java policy and simulated Frida adapter | Executable Node suite covers original validation/pinning controls, capability rollback and supported API wiring. |
+| Worker lifecycle and source construction | Executable Python suite covers profiles, JSON config, readiness, cancellation and owned-process cleanup. |
+| Rust application lifecycle | Local child pipes and fixture ADB cover typed receipts, output drain, recovery, profile preflight and legacy cleanup. |
+| UI | Selection/dependency regressions and production frontend build are local checks. |
+| Real Android/Frida/OkHttp TLS and hostname controls | **NOT RUN** |
+| Actual app termination/restoration and API/ABI compatibility | **NOT RUN** |
+
+Simulated tests do not prove Android execution, cryptography or compatibility. Historical emulator observations used the previous backend. The source candidate must remain draft until real-device acceptance is separately recorded. No native UI/device evidence is inferred from a headless build.

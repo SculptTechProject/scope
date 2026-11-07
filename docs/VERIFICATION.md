@@ -1,5 +1,9 @@
 # Recorded verification
 
+## Scope-owned Android engine boundary — 2026-11-07
+
+The current source replaces the imported hook backend with Scope-owned Java hooks and ends the owned app process on Frida Stop. Local executable Node/Python policy/adapter and Rust lifecycle tests use simulated Java/Frida or local child processes; they do not execute Android TLS. Real Android/Frida/OkHttp TLS, hostname controls, API/ABI compatibility and Stop restoration acceptance are **NOT RUN**. Earlier emulator receipts below describe the previous backend and remain historical. See [current engine coverage](ANDROID_ENGINE.md).
+
 ## Endpoint manual editing candidate — 2026-11-06
 
 Scope 1.3.0 adds a `pause` Traffic rule with request, response or both-stage

@@ -139,6 +139,26 @@ describe('Proxy listener settings', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Start interception' }));
     });
   }
+  it('requires an explicit Frida selection and certificate for unpinning', async () => {
+    androidAvailable();
+    await mount();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Connect a device Android/ }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Demo app com.example.demo/ }));
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Frida Optional instrumentation/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trust the Scope CA' }));
+    expect(screen.getByRole('checkbox', { name: 'TLS certificate unpinning' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'TLS certificate unpinning' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Proxy configuration' }));
+    expect(screen.getByRole('button', { name: 'Start interception' })).toBeDisabled();
+    expect(mocks.start_device).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('checkbox', { name: 'Root detection hooks' }),
+    ).not.toBeInTheDocument();
+  });
   it('uses the configured port when demo traffic starts an idle listener', async () => {
     idleListener();
     await mount();
