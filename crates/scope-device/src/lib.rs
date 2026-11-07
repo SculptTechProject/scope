@@ -139,6 +139,16 @@ impl DeviceManager {
         }
     }
 
+    fn log_worker(&self, generation: u64, text: impl Into<String>) {
+        let mut status = self.inner.status.lock().unwrap();
+        if self.inner.worker_generation.load(Ordering::SeqCst) == generation {
+            status.logs.push(text.into());
+            if status.logs.len() > 200 {
+                status.logs.remove(0);
+            }
+        }
+    }
+
     async fn command(&self, serial: &str, args: &[&str]) -> Result<String> {
         adb::run(&self.inner.adb, Some(serial), args).await
     }
@@ -629,9 +639,7 @@ impl DeviceManager {
         tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                if manager.inner.worker_generation.load(Ordering::SeqCst) == generation {
-                    manager.log(line);
-                }
+                manager.log_worker(generation, line);
             }
         });
         let mut worker = Worker {
@@ -1784,6 +1792,35 @@ mod tests {
         assert!(!manager.status().running);
         assert!(manager.status().message.contains("press Stop"));
     }
+    #[test]
+    fn stderr_waiting_for_status_lock_cannot_append_to_a_new_generation() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        let mut status = manager.inner.status.lock().unwrap();
+        let (started, waiting) = std::sync::mpsc::channel();
+        let old_worker = manager.clone();
+        let writer = std::thread::spawn(move || {
+            started.send(()).unwrap();
+            old_worker.log_worker(0, "old worker stderr");
+        });
+        waiting.recv().unwrap();
+        // Hold the actual status lock while the old worker reaches its append boundary.
+        std::thread::sleep(Duration::from_millis(20));
+        manager.inner.worker_generation.store(1, Ordering::SeqCst);
+        *status = DeviceStatus {
+            message: "new session".into(),
+            ..Default::default()
+        };
+        drop(status);
+        writer.join().unwrap();
+        assert!(
+            manager.status().logs.is_empty(),
+            "stale stderr must not enter the replacement status"
+        );
+        manager.log_worker(1, "current worker stderr");
+        assert_eq!(manager.status().logs, ["current worker stderr"]);
+    }
+
     #[tokio::test]
     async fn late_worker_eof_cannot_overwrite_a_new_session_status() {
         let directory = tempfile::tempdir().unwrap();
