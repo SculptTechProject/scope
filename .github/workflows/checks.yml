@@ -52,6 +52,9 @@ jobs:
       - run: node --test resources/frida/tests/scope-engine.test.cjs
       - run: node --test scripts/release.test.mjs
       - run: python -m unittest discover -s resources/device/tests
+      - name: Test owned Android fixture host controls
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s examples/android-engine-fixture/tests
       - run: npm audit --audit-level=high
       - run: npm run package
       - name: Exercise real desktop engine and stdio MCP
