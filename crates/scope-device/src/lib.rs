@@ -131,21 +131,21 @@ impl DeviceManager {
         self.inner.status.lock().unwrap().clone()
     }
 
-    fn log(&self, text: impl Into<String>) {
+    fn log(&self, text: impl AsRef<str>) {
         let mut status = self.inner.status.lock().unwrap();
-        status.logs.push(text.into());
-        if status.logs.len() > 200 {
+        if status.logs.len() == 200 {
             status.logs.remove(0);
         }
+        status.logs.push(bounded_diagnostic(text.as_ref()));
     }
 
-    fn log_worker(&self, generation: u64, text: impl Into<String>) {
+    fn log_worker(&self, generation: u64, text: impl AsRef<str>) {
         let mut status = self.inner.status.lock().unwrap();
         if self.inner.worker_generation.load(Ordering::SeqCst) == generation {
-            status.logs.push(text.into());
-            if status.logs.len() > 200 {
+            if status.logs.len() == 200 {
                 status.logs.remove(0);
             }
+            status.logs.push(bounded_diagnostic(text.as_ref()));
         }
     }
 
@@ -635,13 +635,7 @@ impl DeviceManager {
             sender,
             observation.clone(),
         ));
-        let manager = self.clone();
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                manager.log_worker(generation, line);
-            }
-        });
+        tokio::spawn(monitor_worker_stderr(self.clone(), stderr, generation));
         let mut worker = Worker {
             child,
             live,
@@ -982,6 +976,123 @@ else echo UNKNOWN; fi"#
 
 const ENGINE: &str = "scope-java-v1";
 
+const WORKER_LINE_LIMIT: usize = 65536;
+const DIAGNOSTIC_LIMIT: usize = 4096;
+
+fn bounded_diagnostic(text: &str) -> String {
+    const MARKER: &str = " [truncated]";
+    if text.len() <= DIAGNOSTIC_LIMIT {
+        return text.to_owned();
+    }
+    let mut end = DIAGNOSTIC_LIMIT - MARKER.len();
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut retained = String::with_capacity(DIAGNOSTIC_LIMIT);
+    retained.push_str(&text[..end]);
+    retained.push_str(MARKER);
+    retained
+}
+
+enum WorkerLine {
+    Text(String),
+    Oversized,
+    InvalidUtf8,
+}
+
+// Keep one bounded line plus the reader's fixed-size input buffer. Report overflow
+// immediately, then discard through LF without retaining the oversized remainder.
+struct WorkerLines<R> {
+    reader: BufReader<R>,
+    bytes: Vec<u8>,
+    discarding: bool,
+}
+impl<R: tokio::io::AsyncRead + Unpin> WorkerLines<R> {
+    fn new(reader: R) -> Self {
+        Self {
+            reader: BufReader::with_capacity(8192, reader),
+            // One extra byte permits a CR immediately before LF at the exact limit.
+            bytes: Vec::with_capacity(WORKER_LINE_LIMIT + 1),
+            discarding: false,
+        }
+    }
+
+    fn finish_line(&mut self) -> WorkerLine {
+        if self.bytes.last() == Some(&b'\r') {
+            self.bytes.pop();
+        }
+        let line = match std::str::from_utf8(&self.bytes) {
+            Ok(text) => WorkerLine::Text(text.to_owned()),
+            Err(_) => WorkerLine::InvalidUtf8,
+        };
+        self.bytes.clear();
+        line
+    }
+
+    async fn next_line(&mut self) -> std::io::Result<Option<WorkerLine>> {
+        loop {
+            let available = self.reader.fill_buf().await?;
+            if available.is_empty() {
+                return if self.discarding || self.bytes.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(self.finish_line()))
+                };
+            }
+            let newline = available.iter().position(|byte| *byte == b'\n');
+            let count = newline.unwrap_or(available.len());
+            let consumed = count + usize::from(newline.is_some());
+            if self.discarding {
+                self.reader.consume(consumed);
+                self.discarding = newline.is_none();
+                continue;
+            }
+            let remaining = WORKER_LINE_LIMIT + 1 - self.bytes.len();
+            self.bytes
+                .extend_from_slice(&available[..count.min(remaining)]);
+            let oversized = count > remaining
+                || (self.bytes.len() > WORKER_LINE_LIMIT && self.bytes.last() != Some(&b'\r'));
+            self.reader.consume(consumed);
+            if oversized {
+                self.bytes.clear();
+                self.discarding = newline.is_none();
+                return Ok(Some(WorkerLine::Oversized));
+            }
+            if newline.is_some() {
+                return Ok(Some(self.finish_line()));
+            }
+        }
+    }
+}
+
+async fn monitor_worker_stderr<R: tokio::io::AsyncRead + Unpin>(
+    manager: DeviceManager,
+    stderr: R,
+    generation: u64,
+) {
+    let mut lines = WorkerLines::new(stderr);
+    loop {
+        match lines.next_line().await {
+            Ok(Some(WorkerLine::Text(line))) => manager.log_worker(generation, line),
+            Ok(Some(WorkerLine::Oversized)) => manager.log_worker(
+                generation,
+                "Frida worker stderr line exceeded 65536 bytes; discarded",
+            ),
+            Ok(Some(WorkerLine::InvalidUtf8)) => {
+                manager.log_worker(generation, "Invalid UTF-8 in Frida worker stderr")
+            }
+            Ok(None) => break,
+            Err(error) => {
+                manager.log_worker(
+                    generation,
+                    format!("Cannot read Frida worker stderr: {error}"),
+                );
+                break;
+            }
+        }
+    }
+}
+
 fn normalize_profiles(profiles: Vec<String>) -> Result<Vec<String>> {
     let profiles = if profiles.is_empty() {
         vec!["proxy".into(), "certificate".into(), "unpinning".into()]
@@ -1112,14 +1223,31 @@ async fn monitor_worker_output<R: tokio::io::AsyncRead + Unpin>(
     observation: Arc<Mutex<WorkerObservation>>,
 ) {
     let mut sender = Some(sender);
-    let mut lines = BufReader::new(stdout).lines();
-    while let Ok(Some(line)) = lines.next_line().await {
+    let mut lines = WorkerLines::new(stdout);
+    loop {
+        let line = lines.next_line().await;
+        if matches!(line, Ok(None)) {
+            break;
+        }
+        let io_failed = line.is_err();
         let _io = manager.inner.recovery_io.lock().unwrap();
         if manager.inner.worker_generation.load(Ordering::SeqCst) != generation {
+            if io_failed {
+                break;
+            }
             continue;
         }
         let mut observed = observation.lock().unwrap();
-        let event = serde_json::from_str::<WorkerEvent>(&line);
+        let event = match line {
+            Ok(Some(WorkerLine::Text(line))) => serde_json::from_str::<WorkerEvent>(&line)
+                .map_err(|_| "Invalid Frida worker protocol receipt".to_owned()),
+            Ok(Some(WorkerLine::Oversized)) => {
+                Err("Frida worker stdout line exceeded 65536 bytes; recovery retained".into())
+            }
+            Ok(Some(WorkerLine::InvalidUtf8)) => Err("Invalid UTF-8 in Frida worker stdout".into()),
+            Err(error) => Err(format!("Cannot read Frida worker stdout: {error}")),
+            Ok(None) => unreachable!(),
+        };
         let mut error = None;
         match event {
             Ok(WorkerEvent::Spawned { engine, pid })
@@ -1190,11 +1318,14 @@ async fn monitor_worker_output<R: tokio::io::AsyncRead + Unpin>(
             Ok(WorkerEvent::Log { message }) => {
                 manager.log(message.as_str().unwrap_or("Frida diagnostic"))
             }
+            Err(message) => error = Some(message),
             _ => error = Some("Invalid Frida worker protocol receipt".into()),
         }
         if let Some(message) = error {
             observed.terminal = true;
-            observed.failure = Some(message.clone());
+            observed
+                .failure
+                .get_or_insert_with(|| bounded_diagnostic(&message));
             if let Some(sender) = sender.take() {
                 let _ = sender.send(Err(message.clone()));
             }
@@ -1206,6 +1337,9 @@ async fn monitor_worker_output<R: tokio::io::AsyncRead + Unpin>(
                 generation,
                 "Frida worker ended; press Stop to reconcile the recorded device state",
             );
+        }
+        if io_failed {
+            break;
         }
     }
     if let Some(sender) = sender.take() {
@@ -1361,6 +1495,313 @@ mod tests {
             vec!["proxy".into()],
         )))
     }
+    #[test]
+    fn retained_diagnostics_are_byte_bounded_on_utf8_boundaries() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        manager.log("a".repeat(4096));
+        assert_eq!(manager.status().logs[0], "a".repeat(4096));
+        manager.log("b".repeat(4097));
+        assert_eq!(manager.status().logs[1].len(), 4096);
+        assert!(manager.status().logs[1].ends_with(" [truncated]"));
+        for _ in 0..205 {
+            manager.log("😀".repeat(4096));
+        }
+        let status = manager.status();
+        assert_eq!(status.logs.len(), 200);
+        assert!(status.logs.iter().all(|line| line.len() <= 4096));
+        assert!(status.logs.iter().all(|line| line.ends_with("[truncated]")));
+        assert!(status.logs.iter().map(String::len).sum::<usize>() <= 819200);
+        assert!(manager
+            .inner
+            .status
+            .lock()
+            .unwrap()
+            .logs
+            .iter()
+            .all(|line| line.capacity() <= 4096));
+        manager.log_worker(0, "é".repeat(4096));
+        assert!(manager.status().logs.last().unwrap().len() <= 4096);
+        let mut oversized_allocation = String::with_capacity(1024 * 1024);
+        oversized_allocation.push_str("short");
+        manager.log(&oversized_allocation);
+        manager.log_worker(0, oversized_allocation);
+        let retained = manager.inner.status.lock().unwrap();
+        assert_eq!(retained.logs.last().unwrap(), "short");
+        assert!(retained.logs.iter().all(|line| line.capacity() <= 4096));
+        assert!(retained.logs.iter().map(String::capacity).sum::<usize>() <= 819200);
+    }
+
+    async fn monitor_fixture(
+        input: Vec<u8>,
+        fragment: usize,
+    ) -> (
+        DeviceManager,
+        Arc<Mutex<WorkerObservation>>,
+        std::result::Result<(), String>,
+        tempfile::TempDir,
+    ) {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        let observation = test_observation();
+        manager
+            .save_recovery(&observation.lock().unwrap().recovery)
+            .unwrap();
+        let (mut writer, reader) = tokio::io::duplex(4096);
+        let (sender, receiver) = oneshot::channel();
+        let task = tokio::spawn(monitor_worker_output(
+            manager.clone(),
+            reader,
+            0,
+            Arc::new(AtomicBool::new(true)),
+            sender,
+            observation.clone(),
+        ));
+        for bytes in input.chunks(fragment) {
+            writer.write_all(bytes).await.unwrap();
+        }
+        drop(writer);
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap();
+        let readiness = receiver.await.unwrap();
+        (manager, observation, readiness, directory)
+    }
+
+    const SPAWN_RECEIPT: &str = r#"{"kind":"spawned","engine":"scope-java-v1","pid":42}"#;
+    const READY_RECEIPT: &str = r#"{"kind":"ready","engine":"scope-java-v1","pid":42,"profiles":["proxy"],"capabilities":{"proxy":["java-url"]}}"#;
+    const STOP_RECEIPT: &str = r#"{"kind":"stopped","engine":"scope-java-v1","pid":42,"spawnAttempted":true,"cleanupComplete":true,"processTerminated":true}"#;
+
+    fn padded_receipt(receipt: &str, size: usize) -> String {
+        let prefix = format!("{},\"padding\":\"", receipt.strip_suffix('}').unwrap());
+        format!("{prefix}{}\"}}", "x".repeat(size - prefix.len() - 2))
+    }
+
+    #[tokio::test]
+    async fn oversized_stdout_is_terminal_even_before_newline() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        let observation = test_observation();
+        manager
+            .save_recovery(&observation.lock().unwrap().recovery)
+            .unwrap();
+        let (mut writer, reader) = tokio::io::duplex(4096);
+        let (sender, receiver) = oneshot::channel();
+        let task = tokio::spawn(monitor_worker_output(
+            manager.clone(),
+            reader,
+            0,
+            Arc::new(AtomicBool::new(true)),
+            sender,
+            observation.clone(),
+        ));
+        writer.write_all(&vec![b'x'; 65537]).await.unwrap();
+        let ready = tokio::time::timeout(Duration::from_millis(300), receiver).await;
+        task.abort();
+        assert!(
+            matches!(ready, Ok(Ok(Err(_)))),
+            "oversize must fail without waiting for LF/EOF: {ready:?}"
+        );
+        assert!(manager.recovery_path().is_file());
+        assert!(observation.lock().unwrap().confirm_stopped().is_err());
+    }
+
+    #[tokio::test]
+    async fn oversized_stdout_cannot_become_ready_or_confirm_cleanup() {
+        for oversized in [
+            serde_json::json!({"kind":"log", "message":"x".repeat(1024 * 1024)}).to_string(),
+            padded_receipt(READY_RECEIPT, 65537),
+        ] {
+            let input = format!("{SPAWN_RECEIPT}\n{oversized}\n{READY_RECEIPT}\n{STOP_RECEIPT}");
+            let (manager, observation, readiness, _directory) =
+                monitor_fixture(input.into_bytes(), 997).await;
+            assert!(
+                readiness.is_err(),
+                "oversize may not be parsed as a valid receipt"
+            );
+            let observed = observation.lock().unwrap();
+            assert!(
+                observed.stopped,
+                "bounded draining must resume at the next line"
+            );
+            assert!(observed.confirm_stopped().is_err());
+            assert!(manager.recovery_path().is_file());
+            let saved: Recovery =
+                serde_json::from_slice(&fs::read(manager.recovery_path()).unwrap()).unwrap();
+            assert!(saved.target_spawn_pending);
+            assert_eq!(saved.target_pid, Some(42));
+            assert!(manager.status().logs.iter().all(|line| line.len() <= 4096));
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_utf8_after_stopped_retains_failure() {
+        let mut input = format!("{SPAWN_RECEIPT}\n{READY_RECEIPT}\n{STOP_RECEIPT}\n").into_bytes();
+        input.extend_from_slice(b"\xff\n");
+        let (_, observation, readiness, _directory) = monitor_fixture(input, 17).await;
+        assert!(readiness.is_ok());
+        assert!(observation.lock().unwrap().confirm_stopped().is_err());
+    }
+
+    #[tokio::test]
+    async fn exact_frame_limit_preserves_fragmented_crlf_and_final_receipts() {
+        let ready = padded_receipt(READY_RECEIPT, 65536);
+        let input = format!("{SPAWN_RECEIPT}\r\n{ready}\r\n{{\"kind\":\"log\",\"message\":\"é😀\"}}\r\n{STOP_RECEIPT}");
+        let (manager, observation, readiness, _directory) =
+            monitor_fixture(input.into_bytes(), 7).await;
+        assert!(readiness.is_ok());
+        observation.lock().unwrap().confirm_stopped().unwrap();
+        assert_eq!(manager.status().logs, ["é😀"]);
+    }
+
+    #[tokio::test]
+    async fn final_stop_receipt_limit_applies_with_lf_crlf_and_eof() {
+        for ending in ["\n", "\r\n", ""] {
+            for (size, accepted) in [(65536, true), (65537, false)] {
+                let stopped = padded_receipt(STOP_RECEIPT, size);
+                let input = format!("{SPAWN_RECEIPT}\n{READY_RECEIPT}\n{stopped}{ending}");
+                let (_, observation, readiness, _directory) =
+                    monitor_fixture(input.into_bytes(), 1023).await;
+                assert!(readiness.is_ok());
+                assert_eq!(
+                    observation.lock().unwrap().confirm_stopped().is_ok(),
+                    accepted,
+                    "size={size}, ending={ending:?}"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn stderr_discards_one_oversized_line_and_resumes_utf8_diagnostics() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        let (mut writer, reader) = tokio::io::duplex(4096);
+        let task = tokio::spawn(monitor_worker_stderr(manager.clone(), reader, 0));
+        let mut input = vec![b'x'; 1024 * 1024];
+        input.extend_from_slice(b"\n\xff\n");
+        input.extend_from_slice("é😀\r\nlast diagnostic".as_bytes());
+        for bytes in input.chunks(997) {
+            writer.write_all(bytes).await.unwrap();
+        }
+        drop(writer);
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap();
+        let logs = manager.status().logs;
+        assert_eq!(
+            logs.len(),
+            4,
+            "overflow must produce one diagnostic, not one per fragment"
+        );
+        assert!(logs[0].contains("exceeded 65536"));
+        assert!(logs[1].contains("Invalid UTF-8"));
+        assert_eq!(&logs[2..], ["é😀", "last diagnostic"]);
+        assert!(logs.iter().all(|line| line.len() <= 4096));
+        manager.inner.worker_generation.store(1, Ordering::SeqCst);
+        monitor_worker_stderr(manager.clone(), b"stale\n".as_slice(), 0).await;
+        assert_eq!(manager.status().logs, logs);
+    }
+
+    #[tokio::test]
+    async fn stderr_no_newline_overflow_is_reported_before_eof() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        let (mut writer, reader) = tokio::io::duplex(4096);
+        let task = tokio::spawn(monitor_worker_stderr(manager.clone(), reader, 0));
+        writer.write_all(&vec![b'x'; 65537]).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while manager.status().logs.is_empty() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(manager.status().logs.len(), 1);
+        writer.write_all(&vec![b'x'; 1024 * 1024]).await.unwrap();
+        drop(writer);
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(manager.status().logs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_keeps_fixed_storage_when_discarding_without_newline() {
+        let (mut writer, reader) = tokio::io::duplex(4096);
+        let writing = tokio::spawn(async move {
+            for _ in 0..256 {
+                writer.write_all(&[b'x'; 8192]).await.unwrap();
+            }
+        });
+        let mut lines = WorkerLines::new(reader);
+        assert!(matches!(
+            lines.next_line().await.unwrap(),
+            Some(WorkerLine::Oversized)
+        ));
+        assert!(lines.bytes.len() <= 65537);
+        assert!(lines.bytes.capacity() <= 65537);
+        assert!(lines.next_line().await.unwrap().is_none());
+        writing.await.unwrap();
+        assert!(lines.bytes.capacity() <= 65537);
+    }
+
+    struct ReadThenError {
+        bytes: Vec<u8>,
+        offset: usize,
+    }
+    impl tokio::io::AsyncRead for ReadThenError {
+        fn poll_read(
+            self: std::pin::Pin<&mut Self>,
+            _context: &mut std::task::Context<'_>,
+            buffer: &mut tokio::io::ReadBuf<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            let reader = self.get_mut();
+            if reader.offset == reader.bytes.len() {
+                return std::task::Poll::Ready(Err(std::io::Error::other("fixture read failure")));
+            }
+            let end = (reader.offset + buffer.remaining()).min(reader.bytes.len());
+            buffer.put_slice(&reader.bytes[reader.offset..end]);
+            reader.offset = end;
+            std::task::Poll::Ready(Ok(()))
+        }
+    }
+
+    #[tokio::test]
+    async fn stdout_io_failure_after_stopped_cannot_confirm_cleanup() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = DeviceManager::new(directory.path().into());
+        let observation = test_observation();
+        manager
+            .save_recovery(&observation.lock().unwrap().recovery)
+            .unwrap();
+        let input = format!("{SPAWN_RECEIPT}\n{READY_RECEIPT}\n{STOP_RECEIPT}\n");
+        let (sender, receiver) = oneshot::channel();
+        monitor_worker_output(
+            manager.clone(),
+            ReadThenError {
+                bytes: input.into_bytes(),
+                offset: 0,
+            },
+            0,
+            Arc::new(AtomicBool::new(true)),
+            sender,
+            observation.clone(),
+        )
+        .await;
+        assert!(receiver.await.unwrap().is_ok());
+        assert!(observation.lock().unwrap().confirm_stopped().is_err());
+        assert!(manager.recovery_path().is_file());
+        assert!(manager
+            .status()
+            .logs
+            .iter()
+            .any(|line| line.contains("fixture read failure")));
+    }
+
     #[test]
     fn old_recovery_defaults_do_not_invent_target_ownership() {
         let state: Recovery = serde_json::from_str(r#"{"serial":"fixture-01","package":"com.scope.demo","mode":"proxy","port":17890,"previousProxy":null,"previousReverse":null,"forwardPort":null,"serverPid":null,"caHash":"1234abcd","rootShell":true}"#).unwrap();
