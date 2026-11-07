@@ -49,10 +49,11 @@ class WorkerTests(unittest.TestCase):
     def test_builder_requires_one_complete_public_ca(self):
         # Missing DER/CA validation would serialize these inputs to the device.
         der = ssl.PEM_cert_to_DER_cert(PEM)
-        key_der = subprocess.run(
-            ["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:1024", "-outform", "DER"],
-            capture_output=True, check=True, timeout=10,
-        ).stdout  # Ephemeral test key; never retained in source.
+        # Complete PKCS#1 RSAPrivateKey ASN.1 with tiny known integers (n=15).
+        # This unusable synthetic key needs no crypto tool or secret material.
+        key_der = b"\x30\x1b" + b"".join(
+            b"\x02\x01" + bytes([value]) for value in (0, 15, 3, 3, 3, 5, 1, 3, 2)
+        )
         cases = {
             "malformed-der": ssl.DER_cert_to_PEM_cert(b"abc"),
             "relabelled-key": ssl.DER_cert_to_PEM_cert(key_der),
