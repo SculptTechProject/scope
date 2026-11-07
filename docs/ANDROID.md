@@ -108,7 +108,7 @@ The locally tested optional worker used CPython 3.12.13 from python-build-standa
 | --- | --- |
 | `proxy` | Subsequent Java URL HTTP(S) connections and available OkHttp3 builders use the Scope listener. |
 | `certificate` | Subsequent SSLContext initialization wraps original X509 trust managers; separate Java PKIX validation admits only valid chains to the supplied Scope CA. |
-| `unpinning` | Enumerated OkHttp3 CertificatePinner List, Certificate[] and Kotlin Function0 overloads may accept a Scope-validated chain after an original pin rejection. Requires `certificate`. |
+| `unpinning` | Ordinary Java OkHttp3 CertificatePinner List and Certificate[] overloads may accept a Scope-validated chain after an original rejection; acceptance target 3.14.9. Requires `certificate`. Lazy Kotlin `check$okhttp` configurations fail before readiness. |
 
 An omitted/empty API or CLI profile array selects `proxy`, `certificate`, `unpinning` for compatibility. Explicit selections remain exact. The UI disables Start for an empty selection; deselecting certificate also deselects/disables unpinning. `root`, `system-ca` and unknown profiles fail before device probes. No root hiding is provided.
 

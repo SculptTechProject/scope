@@ -109,3 +109,7 @@ are recorded in the [runtime notice index](resources/device/licenses/README.md).
 Keep that directory with the integration sources. Any future redistribution of
 the optional native runtime requires a complete artifact-specific dependency and
 corresponding-source review. The public packaging checks currently reject it.
+
+## Owned Android acceptance APK (test only)
+
+The original [lab fixture](examples/android-engine-fixture/README.md) downloads checksum-locked OkHttp 3.14.9 and Okio 1.17.2 only into an explicit external build directory. Its APK includes [dependency notices](examples/android-engine-fixture/THIRD_PARTY_NOTICES.txt), Apache-2.0 text and any embedded JAR notices, including the Public Suffix List MPL-2.0 notice. These JARs and APKs are excluded from source control and Scope production resources.

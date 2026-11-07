@@ -249,46 +249,17 @@
     function installUnpinning(transaction) {
       trustState();
       const Pinner = use('okhttp3.CertificatePinner');
+      // Normal Kotlin connections may lose the raw chain during original-manager
+      // cleaning before check$okhttp sees it. Public overloads on the same class
+      // cannot establish coverage. Refuse this configuration transactionally.
+      if (Pinner['check$okhttp']) throw new Error('Unsupported lazy OkHttp configuration: check$okhttp; use the ordinary Java OkHttp 3.14.9 acceptance target');
       let count = 0;
-      let Supplier;
-      for (const name of ['check', 'check$okhttp']) {
-        if (!Pinner[name]) continue;
-        for (const method of Pinner[name].overloads) {
+      if (Pinner.check) {
+        for (const method of Pinner.check.overloads) {
           const args = method.argumentTypes.map(type => type.className);
-          const ordinary = name === 'check' && args.length === 2 && args[0] === 'java.lang.String' && ['java.util.List', '[Ljava.security.cert.Certificate;'].includes(args[1]);
-          const lazy = name === 'check$okhttp' && args.length === 2 && args[0] === 'java.lang.String' && args[1] === 'kotlin.jvm.functions.Function0';
-          if (!ordinary && !lazy) throw new Error('Unsupported OkHttp pinner overload: ' + name + '(' + args.join(', ') + ')');
-          if (lazy && !Supplier) {
-            Supplier = Java.registerClass({
-              name: 'dev.scope.runtime.ScopePeerChainSupplier',
-              implements: [use('kotlin.jvm.functions.Function0')],
-              fields: { delegate: 'kotlin.jvm.functions.Function0', chain: 'java.lang.Object', evaluated: 'boolean' },
-              methods: {
-                invoke: {
-                  returnType: 'java.lang.Object', argumentTypes: [],
-                  implementation() {
-                    if (!this.evaluated.value) {
-                      this.chain.value = this.delegate.value.invoke();
-                      this.evaluated.value = true;
-                    }
-                    return this.chain.value;
-                  }
-                }
-              }
-            });
-          }
+          const ordinary = args.length === 2 && args[0] === 'java.lang.String' && ['java.util.List', '[Ljava.security.cert.Certificate;'].includes(args[1]);
+          if (!ordinary) throw new Error('Unsupported OkHttp pinner overload: check(' + args.join(', ') + ')');
           transaction.hook(method, function (host, peer) {
-            if (lazy) {
-              const supplier = Supplier.$new();
-              supplier.delegate.value = peer;
-              // Let the original decide whether pins need a chain at all. Cache
-              // its actual input so a second supplier result cannot grant trust.
-              try { return method.call(this, host, supplier); } catch (rejection) {
-                if (!supplier.evaluated.value || !isJavaException(rejection, 'javax.net.ssl.SSLPeerUnverifiedException')) throw rejection;
-                const chain = Java.cast(supplier.chain.value, use('java.util.List'));
-                return policy.checkPins(chain, () => { throw rejection; });
-              }
-            }
             return policy.checkPins(peer, () => method.call(this, host, peer));
           });
           count++;

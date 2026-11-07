@@ -8,7 +8,7 @@ The experimental `scope-java-v1` engine uses documented Frida/Java APIs and the 
 | --- | --- | --- |
 | `proxy` | Java URL openConnection overloads and available OkHttp3 Builder.build | Existing clients, other Java clients and native connections are not covered. |
 | `certificate` | Subsequent SSLContext.init, original basic/extended X509 managers | Existing/default contexts are not covered. Original socket/SSLEngine delegation and hostname verification remain active. |
-| `unpinning` | Enumerated OkHttp3 CertificatePinner List, Certificate[] and Kotlin Function0 signatures | Requires certificate profile; missing/unknown pinner capabilities fail startup. Custom/obfuscated/native pinners are unsupported. |
+| `unpinning` | Ordinary Java OkHttp3 CertificatePinner List and Certificate[] signatures; acceptance target 3.14.9 | Requires certificate profile; missing/unknown pinner capabilities fail startup. Custom/obfuscated/native pinners are unsupported. |
 
 A separate empty KeyStore contains only the supplied Scope CA, and a real Java TrustManagerFactory performs chain validation. CA constraints, certificate validity, server-leaf checks and original Java exception types bound acceptance. A valid Scope chain can override an original certificate/pin rejection only at the supported seams; unrelated failures and non-Scope chain decisions remain unchanged. No trust-all manager, hostname bypass or expiry bypass is installed. Native TLS, Cronet, QUIC, Flutter, child processes and root hiding are unsupported.
 
@@ -34,3 +34,9 @@ A failed/timed-out worker or missing acknowledgment retains recovery. After rest
 | Actual app termination/restoration and API/ABI compatibility | **NOT RUN** |
 
 Simulated tests do not prove Android execution, cryptography or compatibility. Historical emulator observations used the previous backend. The source candidate must remain draft until real-device acceptance is separately recorded. No native UI/device evidence is inferred from a headless build.
+
+## Owned acceptance fixture
+
+The [original lab APK and manual matrix](../examples/android-engine-fixture/README.md) target real OkHttp 3.14.9 with a deliberately mismatching pin, fresh platform contexts and ephemeral loopback-only valid/foreign/wrong-host/expired TLS endpoints. Build/signature and host certificate-fixture checks are separate from Android execution. All Android/Frida/TLS/Stop gates remain **NOT RUN**.
+
+Recognized Kotlin lazy `check$okhttp` configurations are rejected transactionally before unpinning readiness, including classes that also expose ordinary public overloads. Their original-manager chain cleaner can discard the raw chain before the pinner sees it. No lazy support or chain-cleaner override is claimed. Ordinary Java overloads preserve the raw chain and typed original/non-Scope error controls.

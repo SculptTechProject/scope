@@ -234,31 +234,21 @@ test('OkHttp actual hook preserves unrelated pin exception and rejects unsupport
   assert.equal(check.implementation, null);
 });
 
-test('Kotlin pin hook validates the exact original supplier result once and preserves no-pin acceptance', () => {
+test('recognized lazy OkHttp refuses readiness and rolls back certificate and ordinary hooks', () => {
   const { createJavaAdapter, createEngine } = api();
-  const f = javaFixture();
+  const f = tlsFixture();
+  const ordinary = method(['java.lang.String', 'java.util.List']);
+  const lazy = method(['java.lang.String', 'kotlin.jvm.functions.Function0']);
   f.classes['kotlin.jvm.functions.Function0'] = {};
-  f.classes['java.util.List'] = {};
-  f.Java.registerClass = spec => ({ $new() {
-    const object = {};
-    for (const field of Object.keys(spec.fields)) object[field] = { value: null };
-    for (const [name, entry] of Object.entries(spec.methods)) object[name] = (typeof entry === 'function' ? entry : entry.implementation).bind(object);
-    return object;
-  } });
-  const rejection = javaError('pin', 'pin mismatch');
-  const check = method(['java.lang.String', 'kotlin.jvm.functions.Function0'], function (host, peer) { if (host === 'no-pins.test') return; peer.invoke(); throw rejection; });
-  f.classes['okhttp3.CertificatePinner'] = { 'check$okhttp': dispatcher(check) };
+  f.classes['okhttp3.CertificatePinner'] = { check: dispatcher(ordinary), 'check$okhttp': dispatcher(lazy) };
   const adapter = createJavaAdapter(f.Java, { caPem: 'public certificate' });
-  createEngine({ profiles: ['certificate', 'unpinning'] }, { installCertificate: () => ['sslcontext-scope-ca'], installUnpinning: adapter.installUnpinning }).install();
-  let calls = 0;
-  const peer = { invoke() { calls++; return calls === 1 ? [leaf({ unrelated: true })] : [leaf()]; } };
-  assert.equal(check.implementation('no-pins.test', peer), undefined);
-  assert.equal(calls, 0);
-  assert.throws(() => check.implementation('pinned.test', peer), e => e === rejection);
-  assert.equal(calls, 1);
-  assert.equal(check.implementation('pinned.test', { invoke: () => [leaf()] }), undefined);
-  const supplierError = new Error('chain cleaner rejected');
-  assert.throws(() => check.implementation('pinned.test', { invoke() { throw supplierError; } }), e => e === supplierError);
+  const engine = createEngine({ profiles: ['certificate', 'unpinning'] }, adapter);
+  // A lazy Handshake supplier may already have discarded the raw Scope chain.
+  // Public overloads on that class do not prove normal connection coverage.
+  assert.throws(() => engine.install(), /Unsupported lazy OkHttp/);
+  assert.equal(f.init.implementation, null);
+  assert.equal(ordinary.implementation, null);
+  assert.equal(lazy.implementation, null);
 });
 
 test('extended accepted issuers registration explicitly implements the X509 array descriptor', () => {
@@ -270,7 +260,7 @@ test('extended accepted issuers registration explicitly implements the X509 arra
   assert.deepEqual(plain(descriptor.argumentTypes), []);
 });
 
-test('valid Scope chain cannot suppress unrelated trust or ordinary/lazy pinner errors', () => {
+test('valid Scope chain cannot suppress unrelated trust or ordinary pinner errors', () => {
   const { createJavaAdapter, createEngine } = api();
   const unrelated = new Error('internal programming failure');
   const f = tlsFixture();
@@ -278,22 +268,13 @@ test('valid Scope chain cannot suppress unrelated trust or ordinary/lazy pinner 
   createEngine({ profiles: ['certificate'] }, createJavaAdapter(f.Java, { caPem: 'public certificate' })).install();
   f.init.implementation(null, [f.original], null);
   assert.throws(() => f.wrapped.checkServerTrusted([leaf()], 'RSA'), e => e === unrelated);
-  for (const lazy of [false, true]) {
+  for (const chainType of ['java.util.List', '[Ljava.security.cert.Certificate;']) {
     const p = javaFixture();
-    p.classes['kotlin.jvm.functions.Function0'] = {};
-    p.classes['java.util.List'] = {};
-    p.Java.registerClass = spec => ({ $new() {
-      const object = {};
-      for (const field of Object.keys(spec.fields)) object[field] = { value: null };
-      for (const [name, entry] of Object.entries(spec.methods)) object[name] = entry.implementation.bind(object);
-      return object;
-    } });
-    const signature = ['java.lang.String', lazy ? 'kotlin.jvm.functions.Function0' : 'java.util.List'];
-    const check = method(signature, (_host, peer) => { if (lazy) peer.invoke(); throw unrelated; });
-    p.classes['okhttp3.CertificatePinner'] = { [lazy ? 'check$okhttp' : 'check']: dispatcher(check) };
+    const check = method(['java.lang.String', chainType], () => { throw unrelated; });
+    p.classes['okhttp3.CertificatePinner'] = { check: dispatcher(check) };
     const adapter = createJavaAdapter(p.Java, { caPem: 'public certificate' });
     createEngine({ profiles: ['certificate', 'unpinning'] }, { installCertificate: () => ['sslcontext-scope-ca'], installUnpinning: adapter.installUnpinning }).install();
-    assert.throws(() => check.implementation('test', lazy ? { invoke: () => [leaf()] } : [leaf()]), e => e === unrelated);
+    assert.throws(() => check.implementation('test', [leaf()]), e => e === unrelated);
   }
 });
 
