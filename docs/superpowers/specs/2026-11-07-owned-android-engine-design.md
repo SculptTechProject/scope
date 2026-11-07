@@ -35,3 +35,9 @@ Real Android/Frida/OkHttp TLS, app-stop restoration and API/ABI compatibility ar
 - https://frida.re/docs/javascript-api/#java
 - https://developer.android.com/privacy-and-security/security-config
 - https://github.com/square/okhttp
+
+## Pinned OkHttp compatibility clarification
+
+Primary-source inspection of OkHttp4.12 shows that the client's original trust manager can reject Scope CA during lazy Handshake chain cleaning; Handshake then exposes an empty peer chain to `check$okhttp`. The pinner hook alone cannot safely recover the lost raw chain. Reject this recognized lazy configuration before claiming unpinning readiness. Retain only the ordinary Java overload path targeted by pinned OkHttp3.14.9 until a coherent cleaner/trust-manager integration has actual runtime validation. This deliberately reduces compatibility instead of treating an empty chain as trusted.
+
+Ship an original, buildable lab APK and bounded loopback TLS fixtures so missing Android acceptance can be reproduced when an owned device is available. Real pinned OkHttp3.14.9 and Okio1.17.2 are test-only dependencies, checksum locked; generated APKs and test keys never enter production resources or source control. APK compilation/signature verification is a separate gate from executing Android TLS/unpinning/Stop tests.
