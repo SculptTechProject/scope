@@ -12,6 +12,7 @@ try {
 } catch (error) { if (error.code !== 'ENOENT') throw error; }
 const api = () => { assert.ok(engine, 'Scope-owned Java engine is implemented'); return engine; };
 const plain = value => JSON.parse(JSON.stringify(value));
+function javaError(javaType, message) { const error = new Error(message); error.$h = { javaType }; return error; }
 
 test('profiles default, deduplicate and reject unsupported or missing dependencies', () => {
   const { normalizeProfiles } = api();
@@ -27,21 +28,21 @@ test('pins skip only a chain accepted by the isolated CA validator; preserve ori
   const valid = {}, unrelated = {}, expired = {}, malformed = {};
   const rejection = new Error('original pin mismatch');
   const checked = [];
-  const policy = createPolicy(chain => { checked.push(chain); if (chain !== valid) throw new Error('PKIX rejection'); });
+  const policy = createPolicy(chain => { checked.push(chain); if (chain !== valid) throw new Error('PKIX rejection'); }, { isPinRejection: error => error === rejection });
   let originalCalls = 0;
   const original = () => { originalCalls++; throw rejection; };
   assert.equal(policy.checkPins(valid, original), undefined);
   for (const chain of [unrelated, expired, malformed, null]) {
     assert.throws(() => policy.checkPins(chain, original), error => error === rejection);
   }
-  assert.equal(originalCalls, 4);
+  assert.equal(originalCalls, 5);
   assert.equal(checked.length, 5);
 });
 
 test('trust delegates original decisions and preserves original errors for invalid Scope chains', () => {
   const { createPolicy } = api();
   const valid = {}, rejection = new Error('original trust rejection');
-  const policy = createPolicy(chain => { if (chain !== valid) throw new Error('invalid'); });
+  const policy = createPolicy(chain => { if (chain !== valid) throw new Error('invalid'); }, { isCertificateRejection: error => error === rejection });
   assert.equal(policy.checkTrust({}, () => 'original acceptance'), 'original acceptance');
   assert.equal(policy.checkTrust(valid, () => { throw rejection; }), undefined);
   assert.throws(() => policy.checkTrust({}, () => { throw rejection; }), error => error === rejection);
@@ -77,6 +78,9 @@ function javaFixture() {
   const x509 = { class: { isInstance(value) { return value === scopeTrust; } } };
   const store = { load(stream, pass) { calls.push(['empty-store', stream, pass]); }, setCertificateEntry(name, cert) { calls.push(['anchor', name, cert]); } };
   const classes = {
+    'java.lang.Throwable': {},
+    'java.security.cert.CertificateException': { class: { isInstance: value => value.javaType === 'certificate' } },
+    'javax.net.ssl.SSLPeerUnverifiedException': { class: { isInstance: value => value.javaType === 'pin' } },
     'java.lang.String': { $new(value) { return { getBytes() { return value; } }; } },
     'java.io.ByteArrayInputStream': { $new() { return {}; } },
     'java.security.cert.CertificateFactory': { getInstance() { return { generateCertificate() { return ca; } }; } },
@@ -127,8 +131,12 @@ function dispatcher(...methods) {
 function tlsFixture(extended = false) {
   const f = javaFixture();
   const calls = [];
-  const rejection = new Error('original rejected');
+  const rejection = javaError('certificate', 'original rejected');
   const original = { extended, getAcceptedIssuers() { return []; }, checkClientTrusted(...args) { calls.push(['client', ...args]); }, checkServerTrusted(...args) { calls.push(['server', ...args]); throw rejection; } };
+  for (const name of ['checkClientTrusted', 'checkServerTrusted']) {
+    const dynamic = original[name];
+    Object.assign(dynamic, dispatcher(...[null, 'java.net.Socket', 'javax.net.ssl.SSLEngine'].map(type => method(['[Ljava.security.cert.X509Certificate;', 'java.lang.String'].concat(type ? [type] : []), dynamic))));
+  }
   f.classes['javax.net.ssl.X509TrustManager'].class.isInstance = value => value === f.scopeTrust || value === original;
   f.classes['javax.net.ssl.X509ExtendedTrustManager'] = { class: { isInstance: value => Boolean(value.extended) } };
   f.scopeTrust.extended = extended;
@@ -141,7 +149,7 @@ function tlsFixture(extended = false) {
     return { $new() {
       const object = { delegate: { value: null } };
       for (const [name, entry] of Object.entries(spec.methods)) {
-        object[name] = Array.isArray(entry) ? (...args) => entry.find(m => m.argumentTypes.length === args.length && (args.length !== 3 || m.argumentTypes[2] === args[2].type)).implementation.apply(object, args) : entry.bind(object);
+        object[name] = Array.isArray(entry) ? (...args) => entry.find(m => m.argumentTypes.length === args.length && (args.length !== 3 || m.argumentTypes[2] === args[2].type)).implementation.apply(object, args) : (typeof entry === 'function' ? entry : entry.implementation).bind(object);
       }
       return object;
     } };
@@ -209,7 +217,7 @@ test('URL proxy hooks redirect HTTP only and rollback restores original implemen
 test('OkHttp actual hook preserves unrelated pin exception and rejects unsupported overload transactionally', () => {
   const { createJavaAdapter, createEngine } = api();
   const f = javaFixture();
-  const rejection = new Error('pin mismatch');
+  const rejection = javaError('pin', 'pin mismatch');
   const check = method(['java.lang.String', 'java.util.List'], () => { throw rejection; });
   f.classes['okhttp3.CertificatePinner'] = { check: dispatcher(check) };
   const adapter = createJavaAdapter(f.Java, { caPem: 'public certificate' });
@@ -237,7 +245,7 @@ test('Kotlin pin hook validates the exact original supplier result once and pres
     for (const [name, entry] of Object.entries(spec.methods)) object[name] = (typeof entry === 'function' ? entry : entry.implementation).bind(object);
     return object;
   } });
-  const rejection = new Error('pin mismatch');
+  const rejection = javaError('pin', 'pin mismatch');
   const check = method(['java.lang.String', 'kotlin.jvm.functions.Function0'], function (host, peer) { if (host === 'no-pins.test') return; peer.invoke(); throw rejection; });
   f.classes['okhttp3.CertificatePinner'] = { 'check$okhttp': dispatcher(check) };
   const adapter = createJavaAdapter(f.Java, { caPem: 'public certificate' });
@@ -251,4 +259,60 @@ test('Kotlin pin hook validates the exact original supplier result once and pres
   assert.equal(check.implementation('pinned.test', { invoke: () => [leaf()] }), undefined);
   const supplierError = new Error('chain cleaner rejected');
   assert.throws(() => check.implementation('pinned.test', { invoke() { throw supplierError; } }), e => e === supplierError);
+});
+
+test('extended accepted issuers registration explicitly implements the X509 array descriptor', () => {
+  const { createJavaAdapter, createEngine } = api();
+  const f = tlsFixture(true);
+  createEngine({ profiles: ['certificate'] }, createJavaAdapter(f.Java, { caPem: 'public certificate' })).install();
+  const descriptor = f.definition.methods.getAcceptedIssuers;
+  assert.equal(descriptor.returnType, '[Ljava.security.cert.X509Certificate;');
+  assert.deepEqual(plain(descriptor.argumentTypes), []);
+});
+
+test('valid Scope chain cannot suppress unrelated trust or ordinary/lazy pinner errors', () => {
+  const { createJavaAdapter, createEngine } = api();
+  const unrelated = new Error('internal programming failure');
+  const f = tlsFixture();
+  f.original.checkServerTrusted = () => { throw unrelated; };
+  createEngine({ profiles: ['certificate'] }, createJavaAdapter(f.Java, { caPem: 'public certificate' })).install();
+  f.init.implementation(null, [f.original], null);
+  assert.throws(() => f.wrapped.checkServerTrusted([leaf()], 'RSA'), e => e === unrelated);
+  for (const lazy of [false, true]) {
+    const p = javaFixture();
+    p.classes['kotlin.jvm.functions.Function0'] = {};
+    p.classes['java.util.List'] = {};
+    p.Java.registerClass = spec => ({ $new() {
+      const object = {};
+      for (const field of Object.keys(spec.fields)) object[field] = { value: null };
+      for (const [name, entry] of Object.entries(spec.methods)) object[name] = entry.implementation.bind(object);
+      return object;
+    } });
+    const signature = ['java.lang.String', lazy ? 'kotlin.jvm.functions.Function0' : 'java.util.List'];
+    const check = method(signature, (_host, peer) => { if (lazy) peer.invoke(); throw unrelated; });
+    p.classes['okhttp3.CertificatePinner'] = { [lazy ? 'check$okhttp' : 'check']: dispatcher(check) };
+    const adapter = createJavaAdapter(p.Java, { caPem: 'public certificate' });
+    createEngine({ profiles: ['certificate', 'unpinning'] }, { installCertificate: () => ['sslcontext-scope-ca'], installUnpinning: adapter.installUnpinning }).install();
+    assert.throws(() => check.implementation('test', lazy ? { invoke: () => [leaf()] } : [leaf()]), e => e === unrelated);
+  }
+});
+
+test('nullable extended delegation selects exact original Socket and SSLEngine overloads', () => {
+  const { createJavaAdapter, createEngine } = api();
+  const f = tlsFixture(true);
+  const selected = [];
+  for (const name of ['checkClientTrusted', 'checkServerTrusted']) {
+    const legacy = f.original[name];
+    const dynamic = (...args) => legacy(...args); // Baseline dynamic dispatcher cannot distinguish null.
+    Object.assign(dynamic, dispatcher(...['java.net.Socket', 'javax.net.ssl.SSLEngine'].map(type => method(['[Ljava.security.cert.X509Certificate;', 'java.lang.String', type], (_chain, _auth, transport) => { assert.equal(transport, null); selected.push([name, type]); }))));
+    f.original[name] = dynamic;
+  }
+  createEngine({ profiles: ['certificate'] }, createJavaAdapter(f.Java, { caPem: 'public certificate' })).install();
+  f.init.implementation(null, [f.original], null);
+  for (const name of ['checkClientTrusted', 'checkServerTrusted']) {
+    for (const type of ['java.net.Socket', 'javax.net.ssl.SSLEngine']) {
+      f.definition.methods[name].find(entry => entry.argumentTypes[2] === type).implementation.call(f.wrapped, [leaf({ unrelated: true })], 'RSA', null);
+    }
+  }
+  assert.deepEqual(selected, [['checkClientTrusted', 'java.net.Socket'], ['checkClientTrusted', 'javax.net.ssl.SSLEngine'], ['checkServerTrusted', 'java.net.Socket'], ['checkServerTrusted', 'javax.net.ssl.SSLEngine']]);
 });

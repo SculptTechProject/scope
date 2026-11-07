@@ -86,14 +86,69 @@ def bounded_call(label, operation, timeout):
     return value
 
 
-def cleanup_owned(device, pid, script, session, timeout=3, process_not_found=()):
-    errors = []
+class ProcessOwnership:
+    """Current local evidence about one spawn, not an atomic remote PID handle."""
 
-    def kill():
+    def __init__(self):
+        self.exited = threading.Event()
+        self.replaced = threading.Event()
+        self.lock = threading.Lock()
+        self.pending_kill = None
+        self.kill_dispatched = False
+        self.kill_uncertain = False
+
+    def observe(self, reason):
+        pending = None
+        with self.lock:
+            if reason == "process-terminated":
+                self.exited.set()
+            elif reason == "process-replaced":
+                self.replaced.set()
+                if self.kill_dispatched:
+                    self.kill_uncertain = True
+                    pending = self.pending_kill
+        if pending is not None:
+            pending.cancel()
+
+    def kill_current(self, operation, cancellable):
+        try:
+            with cancellable if cancellable is not None else nullcontext():
+                with self.lock:
+                    if self.replaced.is_set():
+                        raise RuntimeError("Process ownership lost: original image was replaced; refusing kill")
+                    if self.exited.is_set():
+                        return
+                    self.pending_kill = cancellable
+                    self.kill_dispatched = True
+                # Check inside the destructive operation's worker thread, rather
+                # than relying on the caller's earlier ownership snapshot.
+                if self.replaced.is_set():
+                    raise RuntimeError("Process ownership lost before kill dispatch; refusing kill")
+                if self.exited.is_set():
+                    return
+                operation()
+        finally:
+            with self.lock:
+                self.pending_kill = None
+                self.kill_dispatched = False
+                uncertain = self.kill_uncertain
+            if uncertain:
+                raise RuntimeError("Kill completion is unknown after in-flight process replacement; cancellation cannot prove remote outcome")
+
+
+def cleanup_owned(device, pid, script, session, timeout=3, process_not_found=(), ownership=None, cancellable_factory=None):
+    errors = []
+    ownership = ownership if ownership is not None else ProcessOwnership()
+
+    def kill_pid():
         try:
             device.kill(pid)
         except process_not_found:
-            pass  # Frida confirms this process already ended.
+            ownership.observe("process-terminated")
+
+    def kill():
+        cancellable = cancellable_factory() if cancellable_factory else None
+        ownership.kill_current(kill_pid, cancellable)
 
     def unload():
         if script.is_destroyed is not True:
@@ -130,10 +185,10 @@ def cleanup_owned(device, pid, script, session, timeout=3, process_not_found=())
 def run_session(device, package, source, profiles, version, stopped, ready_timeout=30, cleanup_timeout=3, process_not_found=(), cancellable_factory=None):
     profiles = normalize_profiles(profiles)
     ready = threading.Event()
-    exited = threading.Event()
+    ownership = ProcessOwnership()
     failure = deque(maxlen=2)
     receipt = []
-    replaced = threading.Event()
+    replaced = ownership.replaced
     session = script = pid = None
 
     def receive(message, _data):
@@ -159,10 +214,8 @@ def run_session(device, package, source, profiles, version, stopped, ready_timeo
         emit("log", message=message.get("stack") or payload or message.get("description") or message)
 
     def detached(reason, crash=None):
-        if reason == "process-terminated":
-            exited.set()
-        elif reason == "process-replaced":
-            replaced.set()
+        ownership.observe(reason)
+        if reason == "process-replaced":
             failure.append("Owned process image was replaced; termination cannot be confirmed safely")
         emit("detached", message=reason, crash=bool(crash))
         stopped.set()
@@ -220,13 +273,17 @@ def run_session(device, package, source, profiles, version, stopped, ready_timeo
     finally:
         startup_complete.set()
         try:
-            cleanup_owned(device, None if exited.is_set() or replaced.is_set() else pid, script, session, cleanup_timeout, process_not_found)
+            cleanup_owned(device, pid, script, session, cleanup_timeout, process_not_found, ownership, cancellable_factory)
         except Exception as error:
             if primary_error:
                 raise RuntimeError(str(primary_error) + "; " + str(error)) from primary_error
             raise
-        if not replaced.is_set() and pid is not None:
-            emit("stopped", engine="scope-java-v1", pid=pid, processTerminated=True, message="Owned application process ended; hooks unloaded and session detached")
+        if replaced.is_set():
+            raise RuntimeError("Owned process image was replaced; cleanup outcome is uncertain") from primary_error
+        if not attempted_spawn:
+            emit("stopped", engine="scope-java-v1", pid=None, spawnAttempted=False, cleanupComplete=True, processTerminated=False)
+        elif pid is not None:
+            emit("stopped", engine="scope-java-v1", pid=pid, spawnAttempted=True, cleanupComplete=True, processTerminated=True, message="Owned application process ended; hooks unloaded and session detached")
     if primary_error:
         raise primary_error
 

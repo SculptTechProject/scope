@@ -174,6 +174,90 @@ class StartupCancellationTests(unittest.TestCase):
         self.assertTrue(cancelled.is_set())
         self.assertIn(("kill", 427), calls)
 
+class ReviewedLifecycleTests(unittest.TestCase):
+    fixture = SessionTests.fixture
+
+    def test_pre_spawn_stop_has_explicit_safe_no_spawn_receipt(self):
+        stopped = WORKER.threading.Event()
+        stopped.set()
+        device = mock.Mock()
+        output = []
+        with mock.patch.object(WORKER, "emit", side_effect=lambda kind, **fields: output.append({"kind": kind, **fields})):
+            WORKER.run_session(device, "app.test", "source", ["proxy"], "17.9.1", stopped)
+        device.spawn.assert_not_called()
+        self.assertEqual(output, [{"kind": "stopped", "engine": "scope-java-v1", "pid": None, "spawnAttempted": False, "cleanupComplete": True, "processTerminated": False}])
+
+    def test_replacement_before_kill_dispatch_never_kills_new_image(self):
+        stopped = WORKER.threading.Event()
+        device, session, script, calls = self.fixture(lambda _cb: stopped.set())
+        detached = []
+        session.on.side_effect = lambda _name, handler: detached.append(handler)
+        bounded = WORKER.bounded_call
+        def interleave(label, operation, timeout):
+            if label == "kill owned application":
+                detached[0]("process-replaced")
+            return bounded(label, operation, timeout)
+        output = []
+        with mock.patch.object(WORKER, "bounded_call", side_effect=interleave), mock.patch.object(WORKER, "emit", side_effect=lambda kind, **fields: output.append({"kind": kind, **fields})):
+            with self.assertRaisesRegex(RuntimeError, "replaced|ownership"):
+                WORKER.run_session(device, "app.test", "source", ["proxy"], "17.9.1", stopped, cleanup_timeout=0.1)
+        device.kill.assert_not_called()
+        self.assertFalse(any(row["kind"] == "stopped" for row in output))
+
+    def test_replacement_cancels_dispatched_kill_and_retains_uncertainty(self):
+        stopped = WORKER.threading.Event()
+        cancelled = WORKER.threading.Event()
+        class Cancellable:
+            def __enter__(self): return self
+            def __exit__(self, *_args): pass
+            def cancel(self): cancelled.set()
+        device, session, script, calls = self.fixture(lambda _cb: stopped.set())
+        detached = []
+        session.on.side_effect = lambda _name, handler: detached.append(handler)
+        def kill(_pid):
+            detached[0]("process-replaced")
+            if not cancelled.wait(0.2):
+                raise RuntimeError("pending kill was not cancelled")
+        device.kill.side_effect = kill
+        with mock.patch.object(WORKER, "emit") as output:
+            with self.assertRaisesRegex(RuntimeError, "unknown|uncertain"):
+                WORKER.run_session(device, "app.test", "source", ["proxy"], "17.9.1", stopped, cleanup_timeout=0.3, cancellable_factory=Cancellable)
+        self.assertTrue(cancelled.is_set())
+        self.assertFalse(any(call.args[0] == "stopped" for call in output.call_args_list))
+
+
+class OwnershipEvidenceTests(unittest.TestCase):
+    fixture = SessionTests.fixture
+
+    def test_attempted_spawn_without_returned_pid_never_claims_no_spawn_cleanup(self):
+        stopped = WORKER.threading.Event()
+        device = mock.Mock()
+        device.spawn.side_effect = RuntimeError("connection lost during spawn")
+        with mock.patch.object(WORKER, "emit") as output:
+            with self.assertRaisesRegex(RuntimeError, "completion is unknown"):
+                WORKER.run_session(device, "app.test", "source", ["proxy"], "17.9.1", stopped)
+        device.kill.assert_not_called()
+        self.assertFalse(any(call.args[0] == "stopped" for call in output.call_args_list))
+
+    def test_observed_exit_before_kill_dispatch_skips_pid_and_acknowledges_termination(self):
+        stopped = WORKER.threading.Event()
+        device, session, script, calls = self.fixture(lambda _cb: stopped.set())
+        detached = []
+        session.on.side_effect = lambda _name, handler: detached.append(handler)
+        bounded = WORKER.bounded_call
+        def interleave(label, operation, timeout):
+            if label == "kill owned application":
+                detached[0]("process-terminated")
+            return bounded(label, operation, timeout)
+        with mock.patch.object(WORKER, "bounded_call", side_effect=interleave), mock.patch.object(WORKER, "emit") as output:
+            WORKER.run_session(device, "app.test", "source", ["proxy"], "17.9.1", stopped, cleanup_timeout=0.1)
+        device.kill.assert_not_called()
+        receipts = [call.kwargs for call in output.call_args_list if call.args[0] == "stopped"]
+        self.assertEqual(len(receipts), 1)
+        self.assertIs(receipts[0]["processTerminated"], True)
+        self.assertIs(receipts[0]["spawnAttempted"], True)
+        self.assertIs(receipts[0]["cleanupComplete"], True)
+
 
 if __name__ == "__main__":
     unittest.main()

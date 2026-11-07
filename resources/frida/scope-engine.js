@@ -19,15 +19,19 @@
     return selected;
   }
 
-  function createPolicy(validateScopeChain) {
+  function createPolicy(validateScopeChain, rejectionTypes = {}) {
     function isScope(chain, context) {
       try { validateScopeChain(chain, context); return true; } catch (_) { return false; }
     }
     return {
-      checkPins(chain, original) { if (!isScope(chain)) return original(); },
+      checkPins(chain, original) {
+        try { return original(); } catch (rejection) {
+          if (!rejectionTypes.isPinRejection || !rejectionTypes.isPinRejection(rejection) || !isScope(chain)) throw rejection;
+        }
+      },
       checkTrust(chain, original, context) {
         try { return original(); } catch (rejection) {
-          if (!isScope(chain, context)) throw rejection;
+          if (!rejectionTypes.isCertificateRejection || !rejectionTypes.isCertificateRejection(rejection) || !isScope(chain, context)) throw rejection;
         }
       }
     };
@@ -148,16 +152,30 @@
         state.manager.checkServerTrusted(peer, authType);
       }
     }
-    const policy = createPolicy(validateScopeChain);
+    function isJavaException(error, className) {
+      if (!error || !error.$h) return false;
+      try {
+        // The retained bridge attaches the original JNI Throwable handle to
+        // Java invocation errors. Inspect that object, never message text.
+        return use(className).class.isInstance(Java.cast(error.$h, use('java.lang.Throwable')));
+      } catch (_) { return false; }
+    }
+    const policy = createPolicy(validateScopeChain, {
+      isCertificateRejection: error => isJavaException(error, 'java.security.cert.CertificateException'),
+      isPinRejection: error => isJavaException(error, 'javax.net.ssl.SSLPeerUnverifiedException')
+    });
 
     function installCertificate(transaction) {
       const state = trustState();
       const init = overload(use('javax.net.ssl.SSLContext'), 'init', ['[Ljavax.net.ssl.KeyManager;', '[Ljavax.net.ssl.TrustManager;', 'java.security.SecureRandom']);
       function wrapperClass(extended) {
         const methods = {
-          getAcceptedIssuers() {
-            const original = this.delegate.value.getAcceptedIssuers();
-            return Java.array('java.security.cert.X509Certificate', Array.from(original).concat([state.ca]));
+          getAcceptedIssuers: {
+            returnType: '[Ljava.security.cert.X509Certificate;', argumentTypes: [],
+            implementation() {
+              const original = this.delegate.value.getAcceptedIssuers();
+              return Java.array('java.security.cert.X509Certificate', Array.from(original).concat([state.ca]));
+            }
           }
         };
         for (const name of ['checkClientTrusted', 'checkServerTrusted']) {
@@ -168,7 +186,7 @@
               argumentTypes: ['[Ljava.security.cert.X509Certificate;', 'java.lang.String'].concat(type ? [type] : []),
               implementation(chain, authType, transport) {
                 const delegate = Java.cast(this.delegate.value, extended ? state.Extended : state.X509);
-                const original = () => type ? delegate[name](chain, authType, transport) : delegate[name](chain, authType);
+                const original = () => type ? delegate[name].overload('[Ljava.security.cert.X509Certificate;', 'java.lang.String', type).call(delegate, chain, authType, transport) : delegate[name](chain, authType);
                 if (name === 'checkClientTrusted') return original();
                 return policy.checkTrust(chain, original, { authType, type, transport });
               }
@@ -266,7 +284,7 @@
               // Let the original decide whether pins need a chain at all. Cache
               // its actual input so a second supplier result cannot grant trust.
               try { return method.call(this, host, supplier); } catch (rejection) {
-                if (!supplier.evaluated.value) throw rejection;
+                if (!supplier.evaluated.value || !isJavaException(rejection, 'javax.net.ssl.SSLPeerUnverifiedException')) throw rejection;
                 const chain = Java.cast(supplier.chain.value, use('java.util.List'));
                 return policy.checkPins(chain, () => { throw rejection; });
               }
