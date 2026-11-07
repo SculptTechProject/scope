@@ -46,6 +46,23 @@ class WorkerTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     WORKER.build_script(root, ca, port, ["proxy"])
 
+    def test_builder_serializes_public_ca_with_canonical_lf_for_all_newlines(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ca = root / "ca.pem"
+            (root / "frida-java-bridge.js").write_text("// bridge\n")
+            (root / "scope-engine.js").write_text("globalThis.ScopeJavaEngine = {start(c) { globalThis.observed = c; }};\n")
+            for newline in [b"\n", b"\r\n", b"\r"]:
+                with self.subTest(newline=newline):
+                    # Explicit bytes reproduce every platform independently of text I/O.
+                    ca.write_bytes(PEM.encode("ascii").replace(b"\n", newline))
+                    try:
+                        source = WORKER.build_script(root, ca, 17890, ["proxy"])
+                    except ValueError as error:
+                        self.fail("Valid public CA newline form was rejected: " + str(error))
+                    result = subprocess.run(["node", "-e", source + "\nconsole.log(JSON.stringify(globalThis.observed))"], capture_output=True, text=True, check=True)
+                    self.assertEqual(json.loads(result.stdout)["caPem"], PEM)
+
     def test_builder_requires_one_complete_public_ca(self):
         # Missing DER/CA validation would serialize these inputs to the device.
         der = ssl.PEM_cert_to_DER_cert(PEM)

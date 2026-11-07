@@ -45,7 +45,8 @@ def build_script(root, ca, port, profiles):
             data = stream.read(65537)
         if len(data) > 65536:
             raise ValueError("oversized CA")
-        cert = data.decode("ascii").strip()
+        # Preserve universal-newline behavior of the former text-mode read.
+        cert = data.decode("ascii").replace("\r\n", "\n").replace("\r", "\n").strip()
         if not re.fullmatch(r"-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----", cert, flags=re.ASCII):
             raise ValueError("invalid PEM")
         der = ssl.PEM_cert_to_DER_cert(cert)
