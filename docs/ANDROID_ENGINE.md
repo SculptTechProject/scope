@@ -16,7 +16,7 @@ System proxy mode remains device-wide and requires manually configured applicati
 
 ## Lifecycle
 
-The worker serializes runtime data as JSON, validates profiles before device contact and requires every requested capability before ready. Rust persists attempted-spawn uncertainty before launching the worker and the exact spawned PID before accepting ready. Terminal errors/detach/EOF cannot revive readiness; a prior worker generation cannot write a newer session's state.
+The worker serializes runtime data as JSON, validates profiles and exactly one complete public X.509 CA before importing Frida or contacting a device and requires every requested capability before ready. Rust persists attempted-spawn uncertainty before launching the worker and the exact spawned PID before accepting ready. Terminal errors/detach/EOF cannot revive readiness; a prior worker generation cannot write a newer session's state.
 
 Stop ends the exact process spawned by the active worker, then unloads/detaches. This is necessary because created proxy/TLS objects can outlive unhooking. Rust allows 12 seconds for the worker's bounded nine-second cleanup plus scheduling overhead, then drains stdout. A matching successful cleanup/termination receipt and successful worker exit are required before clearing pending cleanup. A receipt proving Stop occurred before any attempted spawn is also accepted without claiming termination.
 

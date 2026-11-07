@@ -65,8 +65,8 @@
 
 ## Final review and publication gates
 
-- [ ] Obtain independent whole-branch source and requirements review, including cross-component lifecycle, compatibility and provenance.
-- [ ] Resolve blocking review findings with covering tests and scoped re-review.
+- [x] Obtain independent whole-branch source and requirements review, including cross-component lifecycle, compatibility and provenance.
+- [x] Resolve blocking review findings with covering tests and scoped re-review.
 - [ ] Record final local and hosted PASS / FAIL / NOT RUN for the exact published head.
 - [ ] Create exactly one draft PR after local source review and verify its URL, head, body and state by readback.
 

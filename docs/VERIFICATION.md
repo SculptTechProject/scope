@@ -4,6 +4,11 @@
 
 The current source replaces the imported hook backend with Scope-owned Java hooks and ends the owned app process on Frida Stop. Local executable Node/Python policy/adapter and Rust lifecycle tests use simulated Java/Frida or local child processes; they do not execute Android TLS. Real Android/Frida/OkHttp TLS, hostname controls, API/ABI compatibility and Stop restoration acceptance are **NOT RUN**. Earlier emulator receipts below describe the previous backend and remain historical. See [current engine coverage](ANDROID_ENGINE.md).
 
+Local source gates passed on Linux: 84 locked headless Rust tests (core/device/MCP), 56 UI tests plus TypeScript/Vite build, 26 Node engine/license/resource tests, 21 device-worker Python tests, 17 integrity-script tests and 10 fixture-helper tests. The final worker preflight regression was observed failing on malformed DER, relabelled synthetic key DER, trailing DER and a non-CA leaf, then passing with complete single-CA parsing before Frida import. The affected Python and embedded-worker Rust suites were rerun after that fix; other checked component source remained unchanged.
+
+The owned fixture APK compiled, signed and passed apksigner v2/v3 verification with the real checksum-locked OkHttp 3.14.9/Okio 1.17.2 test dependencies. Host TLS controls accepted the valid fixture CA and rejected foreign, wrong-host and expired peers. These are host/build results, **not Android execution**. One bounded software-emulator prerequisite boot failed with SIGSEGV before Android startup; cause is unestablished. Independent component and whole-branch source reviews resolved all reported findings with covering regressions and scoped re-reviews. Hosted exact-head check receipts belong in the draft PR and are separate from these local results.
+
+
 ## Endpoint manual editing candidate — 2026-11-06
 
 Scope 1.3.0 adds a `pause` Traffic rule with request, response or both-stage
