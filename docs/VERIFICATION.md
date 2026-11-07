@@ -1,5 +1,20 @@
 # Recorded verification
 
+## Android worker diagnostic memory follow-up — 2026-11-07
+
+The follow-up to the initial reviewed engine head `4edeb09` bounds worker stdout/stderr framing before JSON parsing and retained device logs. See [exact limits and lifecycle behavior](ANDROID_ENGINE.md#bounded-host-diagnostics).
+
+A reproducible synthetic profile sends 205 diagnostics of 16,384 bytes and retains the latest 200. Stored UTF-8 payload fell from **3,276,800 to 819,200 bytes (75% less)**. The bounded candidate's actual retained String capacities also total 819,200 bytes. A malformed/custom 1 MiB JSON diagnostic is now a terminal stdout protocol failure, rather than a stored large entry. These are host diagnostic-storage measurements, not total RSS, normal-traffic latency, JNI or Android throughput claims. The fixed framing buffers add a known bounded allocation per pipe; no general low-traffic memory improvement is inferred.
+
+- **PASS:** observed RED→GREEN production regressions for oversized unterminated stdout, over-limit readiness/cleanup receipts, UTF-8 storage boundaries/capacity and invalid UTF-8 after a valid Stop. Previously that read error silently ended the monitor; it now preserves failure/recovery.
+- **PASS:** 45 device Rust tests and 94 headless core/device/MCP tests; 16 Java engine adapter tests; 23 Python device tests. Added guards revalidate the same peer/CA after expiry changes and verify exact CA input-size boundaries and reread changed contents.
+- **PASS:** ten independent production-path acceptance probes cover fragmented UTF-8, exact/over-limit LF/CRLF/EOF, no-newline overflow, sticky failure despite later receipts, I/O error after Stop, bounded stderr resumption/generation isolation and actual child-pipe draining/cleanup. These copied-source probes are separate from the committed regression suite and are not Android evidence.
+- **PASS:** independent scoped source review, formatting and whitespace checks. One unchanged fake-ADB fixture produced `Text file busy`; an isolated check and final full suite passed. No timeout or fixture behavior was weakened; the failure is preserved in the implementation receipt.
+
+A separate class-wrapper-cache candidate was rejected: the retained Frida bridge already caches successful wrappers, warmed class-factory misses were zero before/after, and bounded Node timing samples were mixed. Fewer Java.use dispatches do not establish a native or Android speedup; no such product change was made.
+
+The emulator prerequisite investigation progressed beyond the earlier crash site using ordinary private directory preparation, but ADB still aborts because its standard user-storage directory is read-only in this executor. No host security setting, standard home directory or system trust store was changed. Actual Android/Frida/TLS/pinning/hostname/Stop acceptance remains **NOT RUN** and the PR stays draft. Exact final hosted check receipts are recorded in the same PR after publication.
+
 ## Scope-owned Android engine boundary — 2026-11-07
 
 The current source replaces the imported hook backend with Scope-owned Java hooks and ends the owned app process on Frida Stop. Local executable Node/Python policy/adapter and Rust lifecycle tests use simulated Java/Frida or local child processes; they do not execute Android TLS. Real Android/Frida/OkHttp TLS, hostname controls, API/ABI compatibility and Stop restoration acceptance are **NOT RUN**. Earlier emulator receipts below describe the previous backend and remain historical. See [current engine coverage](ANDROID_ENGINE.md).

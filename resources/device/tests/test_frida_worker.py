@@ -111,6 +111,22 @@ class WorkerTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Scope CA"):
                     WORKER.main()
 
+    def test_exact_ca_size_boundary_and_new_contents_are_revalidated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "frida-java-bridge.js").write_text("// bridge")
+            (root / "scope-engine.js").write_text("// engine")
+            ca = root / "ca.pem"
+            public = PEM.encode("ascii")
+            ca.write_bytes(public + b" " * (65536 - len(public)))
+            self.assertIn("ScopeJavaEngine.start", WORKER.build_script(root, ca, 17890, ["proxy"]))
+            ca.write_bytes(ca.read_bytes() + b" ")
+            with self.assertRaisesRegex(ValueError, "64 KiB"):
+                WORKER.build_script(root, ca, 17890, ["proxy"])
+            ca.write_bytes(b"not a certificate")
+            with self.assertRaisesRegex(ValueError, "Scope CA"):
+                WORKER.build_script(root, ca, 17890, ["proxy"])
+
     def test_ready_gate_requires_engine_exact_profiles_and_real_capabilities(self):
         self.assertTrue(hasattr(WORKER, "validate_ready"), "worker validates installed capabilities")
         good = {"kind": "scope-hooks-ready", "engine": "scope-java-v1", "profiles": ["proxy"], "capabilities": {"proxy": ["java-url"]}}

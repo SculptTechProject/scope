@@ -22,6 +22,14 @@ Stop ends the exact process spawned by the active worker, then unloads/detaches.
 
 A failed/timed-out worker or missing acknowledgment retains recovery. After restart, only observed absence of a saved PID in a readable root procfs view can establish that it ended. Present/inaccessible PID state and unknown attempted-spawn completion require manual reconciliation; saved target PIDs are never killed. Existing mapping ownership checks preserve external proxy/reverse/forward changes.
 
+## Bounded host diagnostics
+
+Worker stdout and stderr are incrementally framed at at most 65,536 bytes per line, excluding LF and its optional preceding CR. The reader retains a fixed 65,537-byte frame buffer plus an 8,192-byte input buffer per pipe. It discards oversized remainders through the next LF without growing a buffer. Final non-newline receipts and valid fragmented UTF-8 remain supported.
+
+Oversized, invalid UTF-8 or failed stdout reads are terminal protocol failures; later readiness/termination messages cannot clear that failure or establish successful cleanup. JSON receipts are never truncated and parsed. Stderr is diagnostic only: oversized/invalid lines produce bounded diagnostics and draining resumes for subsequent lines, with the existing generation isolation.
+
+Retained log entries contain at most 4,096 UTF-8 bytes including any truncation marker, with at most 200 entries (819,200 stored text bytes). Entries are copied into bounded fresh strings so a shortened entry cannot retain its former large allocation. These are diagnostic framing/storage limits, not a bound on all application memory or a measured Android throughput improvement. Normal Python worker messages remain compatible with the framing limit even when JSON escaping expands 4,000 Unicode characters.
+
 ## Evidence and acceptance
 
 | Gate | Current evidence |

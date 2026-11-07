@@ -297,3 +297,19 @@ test('nullable extended delegation selects exact original Socket and SSLEngine o
   }
   assert.deepEqual(selected, [['checkClientTrusted', 'java.net.Socket'], ['checkClientTrusted', 'javax.net.ssl.SSLEngine'], ['checkServerTrusted', 'java.net.Socket'], ['checkServerTrusted', 'javax.net.ssl.SSLEngine']]);
 });
+
+
+test('the same peer and CA are revalidated after an earlier accepted fallback', () => {
+  const f = tlsFixture();
+  api().createEngine({ profiles: ['certificate'] }, api().createJavaAdapter(f.Java, { caPem: 'public certificate' })).install();
+  f.init.implementation(null, [f.original], null);
+  let expired = false;
+  const chain = [leaf({ checkValidity() { if (expired) throw Error('now expired'); } })];
+  f.wrapped.checkServerTrusted(chain, 'RSA');
+  expired = true;
+  assert.throws(() => f.wrapped.checkServerTrusted(chain, 'RSA'), error => error === f.rejection);
+  expired = false;
+  f.ca.checkValidity = () => { throw Error('CA now expired'); };
+  assert.throws(() => f.wrapped.checkServerTrusted(chain, 'RSA'), error => error === f.rejection);
+  assert.equal(f.calls.filter(call => call[0] === 'server').length, 3);
+});
