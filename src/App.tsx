@@ -1651,6 +1651,7 @@ function DevicePanel({
   );
   const start = () =>
     void perform('device', async () => {
+      if (mode === 'frida' && profiles.length === 0) return;
       let p = proxy;
       if (!p.running) {
         const port = validatedListenerPort(portDraft);
@@ -1783,14 +1784,17 @@ function DevicePanel({
                 <p>
                   <strong>Device-wide capture.</strong> Android's proxy setting applies to the whole
                   device. Other apps may appear in this session; choosing an app launches it and
-                  does not isolate its traffic.
+                  does not isolate its traffic. HTTPS requires manually configured app trust; no
+                  system CA is installed.
                 </p>
               </div>
             ) : (
               <div className="profile-options">
                 <p className="help-copy">
                   Select the bundled hook profiles for an app you own or are authorized to test.
-                  Frida support depends on Android and application versions.
+                  Experimental Java URL/OkHttp hooks only. Stop ends the instrumented app process.
+                  Unpinning requires the Scope CA profile; native TLS and custom pinners are
+                  unsupported.
                 </p>
                 <div className="info-callout">
                   <Info size={15} />
@@ -1803,15 +1807,19 @@ function DevicePanel({
                   ['certificate', 'Trust the Scope CA'],
                   ['proxy', 'Proxy configuration'],
                   ['unpinning', 'TLS certificate unpinning'],
-                  ['root', 'Root detection hooks'],
                 ].map(([id, label]) => (
                   <label key={id}>
                     <input
                       type="checkbox"
                       checked={profiles.includes(id)}
+                      disabled={id === 'unpinning' && !profiles.includes('certificate')}
                       onChange={(e) =>
                         setProfiles((p) =>
-                          e.target.checked ? [...p, id] : p.filter((x) => x !== id),
+                          e.target.checked
+                            ? [...p, id]
+                            : p.filter(
+                                (x) => x !== id && !(id === 'certificate' && x === 'unpinning'),
+                              ),
                         )
                       }
                     />
@@ -1839,7 +1847,13 @@ function DevicePanel({
             ) : (
               <button
                 className="button primary"
-                disabled={!native || !serial || !app || !!busy}
+                disabled={
+                  !native ||
+                  !serial ||
+                  !app ||
+                  !!busy ||
+                  (mode === 'frida' && profiles.length === 0)
+                }
                 onClick={start}
               >
                 {busy === 'device' ? (
