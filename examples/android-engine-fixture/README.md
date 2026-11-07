@@ -13,7 +13,7 @@ Supply Android SDK platform `android-35`, build-tools `36.0.0` and JDK 17. The h
 | `com.squareup.okhttp3:okhttp:3.14.9` | `2570fab55515cbf881d7a4ceef49fc515490bc027057e666776a2832465aeca0` |
 | `com.squareup.okio:okio:1.17.2` | `f80ce42d2ffac47ad4c47e1d6f980d604d247ceb1a886705cf4581ab0c9fe2b8` |
 
-Downloads reject redirects, exceed neither 2 MiB per artifact nor a bounded network operation, and use a 45-second transfer deadline with a 15-second socket timeout. Cached JARs are rechecked. Generated output must be outside the repository. Use a dedicated empty directory: build subdirectories are replaced on subsequent builds.
+Downloads reject redirects, exceed neither 2 MiB per artifact nor a bounded network operation, and use a 45-second transfer deadline with a 15-second socket timeout. Cached JARs are rechecked. Generated output must be outside the repository. Use a dedicated empty directory. The helper creates an ownership marker and refuses nonempty unowned directories before changing permissions or replacing build subdirectories; marked directories support repeat builds.
 
 ```sh
 python3 examples/android-engine-fixture/build.py \
@@ -26,7 +26,7 @@ python3 examples/android-engine-fixture/build.py \
 python3 -m unittest discover -s examples/android-engine-fixture/tests -v
 ```
 
-For the genuine pin-mismatch control, start the TLS fixture below first, then pass its public CA via `--scope-ca /path/from/server/scope-ca.pem`. Only a single public certificate of at most 64 KiB is accepted; private-key PEMs are rejected. It is embedded as an APK asset, never installed in a system trust store. Rebuild after regenerating fixture CAs.
+For the genuine pin-mismatch control, start the TLS fixture below first, then pass its public CA via `--scope-ca /path/from/server/scope-ca.pem`. Only a single actual X.509 CA certificate of at most 64 KiB is accepted. Parsing must return exactly one CA whose complete DER equals the decoded input; malformed DER, relabelled private keys, server leaves and trailing data are rejected. It is embedded as an APK asset, never installed in a system trust store. Rebuild after regenerating fixture CAs.
 
 The helper runs `javac`, `d8`, `aapt`, `zipalign`, `keytool`, and `apksigner sign` followed by actual `apksigner verify --verbose --print-certs`. The output contains the signed APK and a JSON receipt with its SHA-256, exact libraries, tool versions and signature verification. Signing uses a disposable, seven-day lab key and the public password `android`; never reuse that key for production. Delete the dedicated output directory when finished. The APK contains the Apache license and dependency notices, including OkHttp's embedded Public Suffix List notice; see [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
 

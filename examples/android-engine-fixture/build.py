@@ -28,6 +28,25 @@ def validate_output(path):
     return path
 
 
+def prepare_output(path):
+    output = validate_output(path)
+    marker = output / '.scope-engine-fixture-build'
+    identity = 'scope-engine-fixture-v1\n'
+    if output.exists():
+        if not output.is_dir():
+            raise ValueError('Output must be a dedicated build directory')
+        owned = marker.is_file() and not marker.is_symlink() and marker.stat().st_size == len(identity) and marker.read_text() == identity
+        if any(output.iterdir()) and not owned:
+            raise ValueError('Refusing nonempty unowned output directory')
+    else:
+        output.mkdir(parents=True, mode=0o700)
+    # Ownership is established before changing permissions or removing children.
+    os.chmod(output, 0o700)
+    if not marker.exists():
+        marker.write_text(identity)
+    return output
+
+
 def verify_jar(path, expected):
     path = Path(path)
     if path.stat().st_size > 2 * 1024 * 1024 or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
@@ -42,9 +61,16 @@ def read_public_ca(path):
     if not re.fullmatch(r'-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----\s*', pem, flags=re.ASCII):
         raise ValueError('Expected one public PEM certificate without private keys')
     try:
-        ssl.PEM_cert_to_DER_cert(pem)
+        der = ssl.PEM_cert_to_DER_cert(pem)
+        # PEM decoding alone accepts arbitrary ASN.1, including relabelled keys.
+        # An empty context parses actual X.509 CAs without trusting system roots.
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.load_verify_locations(cadata=pem)
+        anchors = context.get_ca_certs(binary_form=True)
+        if len(anchors) != 1 or anchors[0] != der:
+            raise ValueError('Expected exactly one complete public CA certificate')
     except (ValueError, ssl.SSLError) as error:
-        raise ValueError('Expected one valid public PEM certificate') from error
+        raise ValueError('Expected one valid complete public PEM CA certificate') from None
     return pem
 
 
@@ -92,9 +118,7 @@ def main():
     parser.add_argument('--scope-ca', type=Path, help='Optional public fixture CA for the explicit okhttp-scope pin control')
     args = parser.parse_args()
     public_ca = read_public_ca(args.scope_ca) if args.scope_ca else None
-    output = validate_output(args.output)
-    output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(output, 0o700)
+    output = prepare_output(args.output)
     jars = acquire(output, args.offline)  # No build tool runs until both hashes pass.
     sdk, jdk = args.sdk.resolve(), args.jdk.resolve()
     tools = sdk / 'build-tools/36.0.0'
