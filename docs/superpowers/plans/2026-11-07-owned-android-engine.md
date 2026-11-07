@@ -1,6 +1,6 @@
 # Scope-owned Android engine Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace HTTP Toolkit runtime hooks with an original CA-scoped Android interception engine in one independently reviewed PR.
 **Architecture:** Original JavaScript hook/policy code runs in the selected app through the existing Python/Frida worker. Rust retains proxy/recovery management and materializes only the new assets. Imported system trust injection and unsupported root profiles are removed explicitly.
@@ -33,16 +33,16 @@
 **Files:** Create `resources/frida/scope-engine.js`, `resources/frida/tests/scope-engine.test.cjs`, `resources/device/tests/test_frida_worker.py`; modify `resources/device/frida_worker.py`.
 **Interfaces:** Worker `build_script(root, ca, port, profiles) -> str` remains available. `normalize_profiles(profiles) -> list[str]` is shared by the CLI/builder. New JS exports a testable engine factory/policy boundary and runs through documented Frida `Java` APIs. JSON runtime config uses public CA/loopback proxy/normalized profiles. Readiness payload identifies engine `scope-java-v1`, selected profiles and installed capabilities; Python validates it. Existing Rust JSONL `ready/error/stopped/detached` kinds remain compatible.
 
-- [ ] Write executable JS and Python failing tests for CA-scoped pin decisions, original rejection propagation, original trust delegation, explicit/default/unsupported profiles, missing classes and transactional rollback, hostile config serialization, readiness validation and owned-PID cleanup.
-- [ ] Observe RED with expected missing implementation or wrong existing behavior; record exact commands/output in report.
-- [ ] Implement original engine (small focused helpers in one runtime file), worker JSON config construction, capability-aware ready gate and finite owned-process cleanup; preserve CLI listing/version and bounded diagnostics. Use the actual Frida API, not a production test stub. Any unimplemented requested capability is an error.
-- [ ] Run focused tests plus complete Python device suite; self-review. Do not claim fixture-based adapter tests are device verification.
-- [ ] Commit only Task1 files and report exact RED/GREEN and remaining limitations.
+- [x] Write executable JS and Python failing tests for CA-scoped pin decisions, original rejection propagation, original trust delegation, explicit/default/unsupported profiles, missing classes and transactional rollback, hostile config serialization, readiness validation and owned-PID cleanup.
+- [x] Observe RED with expected missing implementation or wrong existing behavior; record exact commands/output in report.
+- [x] Implement original engine (small focused helpers in one runtime file), worker JSON config construction, capability-aware ready gate and finite owned-process cleanup; preserve CLI listing/version and bounded diagnostics. Use the actual Frida API, not a production test stub. Any unimplemented requested capability is an error.
+- [x] Run focused tests plus complete Python device suite; self-review. Do not claim fixture-based adapter tests are device verification.
+- [x] Commit only Task1 files and report exact RED/GREEN and remaining limitations.
 
 ### Task 2: Application integration, migration and release verification
 
 **Files:** Modify `crates/scope-device/src/lib.rs`, `src/App.tsx`, `README.md`, `docs/ANDROID.md`, `THIRD_PARTY_NOTICES.md`, `.github/workflows/checks.yml`, affected existing tests; remove six imported HTK runtime JS/config files and `resources/device/install-system-ca.template.sh`; retain Frida bridge/licenses. Add `docs/ANDROID_ENGINE.md` with explicit coverage/evidence.
-**Interfaces:** Consume Task1 `scope-engine.js`, `normalize_profiles` and JSONL engine/capability payload. Rust rejects unsupported profiles before ADB/root probes; ASSETS materializes only `frida/scope-engine.js`, existing Frida bridge and worker. Remove automatic system CA installation, preserve cleanup of old recovery ca_hash. UI removes unsupported root option and explains Stop ends the instrumented process.
+**Interfaces:** Consume Task1 `scope-engine.js`, `normalize_profiles` and JSONL engine/capability payload. Rust persists worker-spawned target PID/pending-cleanup before readiness where observable and requires explicit successful termination acknowledgment (or conservative proof that the recorded process no longer exists) before clearing recovery; worker timeout/nonzero/missing acknowledgment must remain an error. New recovery fields are backward-compatible serde defaults. Startup failure allows bounded worker teardown before kill. Rust rejects unsupported profiles before ADB/root probes; ASSETS materializes only `frida/scope-engine.js`, existing Frida bridge and worker. Remove automatic system CA installation, preserve cleanup of old recovery ca_hash. UI removes unsupported root option and explains Stop ends the instrumented process.
 
 - [ ] Add regression tests for early unsupported profile rejection, asset construction and legacy owned-CA recovery behavior where affected; observe RED.
 - [ ] Wire original engine and remove imported runtime source/injection path. Preserve unrelated Rust proxy and recovery semantics.

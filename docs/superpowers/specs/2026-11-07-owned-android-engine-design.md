@@ -18,7 +18,7 @@ Supported profiles are `proxy`, `certificate`, `unpinning`; an empty selection m
 
 The Python worker validates finite profile, PEM and port inputs before device work. Source construction uses JSON serialization for runtime data, not source-text replacement. The engine reports per-capability installation results. Readiness requires successful installation of every requested profile, not merely entry into Java.perform. Unsupported classes/overloads or hook errors produce actionable bounded diagnostics and no success claim. Installation failure rolls back installed method implementations.
 
-Process-created proxy/trust objects can outlive method unhooking. Therefore Stop terminates the exact process spawned by this worker, then unloads/detaches; it does not promise that unloading alone restores the running app. It must not kill an unrelated process. Cleanup errors remain visible, and no clean-stop receipt is emitted after failed cleanup. Existing Rust recovery of owned ADB/server state and legacy CA removal remains available after restart.
+Process-created proxy/trust objects can outlive method unhooking. Therefore Stop terminates the exact process spawned by this worker, then unloads/detaches; it does not promise that unloading alone restores the running app. It must not kill an unrelated process. Cleanup errors remain visible, and no clean-stop receipt is emitted after failed cleanup. The worker emits a spawned-PID event before attach and an explicit termination acknowledgment only after cleanup. Rust preserves pending target-process cleanup in recovery records; it must not convert a killed/failed worker into a successful Stop. A saved owned PID can be checked for absence before clearing an interrupted session; ambiguous state is an actionable error, never a reason to kill an arbitrary or reused PID. Existing Rust recovery of owned ADB/server state and legacy CA removal remains available after restart.
 
 ## Compatibility changes
 
@@ -34,4 +34,4 @@ Real Android/Frida/OkHttp TLS, app-stop restoration and API/ABI compatibility ar
 
 - https://frida.re/docs/javascript-api/#java
 - https://developer.android.com/privacy-and-security/security-config
-- https://square.github.io/okhttp/features/https/
+- https://github.com/square/okhttp
