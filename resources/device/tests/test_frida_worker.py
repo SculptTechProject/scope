@@ -1,7 +1,9 @@
 """Worker contract tests; fake Frida calls are not Android coverage."""
+import builtins
 import importlib.util
 import json
 from pathlib import Path
+import ssl
 import subprocess
 import tempfile
 import time
@@ -12,7 +14,9 @@ SOURCE = Path(__file__).resolve().parents[1] / "frida_worker.py"
 SPEC = importlib.util.spec_from_file_location("scope_frida_worker", SOURCE)
 WORKER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(WORKER)
-PEM = "-----BEGIN CERTIFICATE-----\nYWJj\n-----END CERTIFICATE-----"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+# Public synthetic certificates only; their disposable signing keys are not retained.
+PEM = (FIXTURES / "ca.pem").read_text(encoding="ascii").strip()
 
 
 class WorkerTests(unittest.TestCase):
@@ -41,6 +45,53 @@ class WorkerTests(unittest.TestCase):
             for port in [0, 65536, True, "17890;evil()"]:
                 with self.assertRaises(ValueError):
                     WORKER.build_script(root, ca, port, ["proxy"])
+
+    def test_builder_requires_one_complete_public_ca(self):
+        # Missing DER/CA validation would serialize these inputs to the device.
+        der = ssl.PEM_cert_to_DER_cert(PEM)
+        key_der = subprocess.run(
+            ["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:1024", "-outform", "DER"],
+            capture_output=True, check=True, timeout=10,
+        ).stdout  # Ephemeral test key; never retained in source.
+        cases = {
+            "malformed-der": ssl.DER_cert_to_PEM_cert(b"abc"),
+            "relabelled-key": ssl.DER_cert_to_PEM_cert(key_der),
+            "trailing-der": ssl.DER_cert_to_PEM_cert(der + b"abc"),
+            "leaf": (FIXTURES / "leaf.pem").read_text(encoding="ascii"),
+            "multiple-certificates": PEM + "\n" + PEM,
+            "private-label": "-----BEGIN PRIVATE KEY-----\nYWJj\n-----END PRIVATE KEY-----",
+            "oversized": " " * 65537,
+            "non-ascii": "\N{SNOWMAN}",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ca = root / "input.pem"
+            (root / "frida-java-bridge.js").write_text("// bridge")
+            (root / "scope-engine.js").write_text("// engine")
+            for name, content in cases.items():
+                with self.subTest(case=name):
+                    ca.write_text(content, encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "Scope CA"):
+                        WORKER.build_script(root, ca, 17890, ["proxy"])
+
+    def test_main_rejects_invalid_ca_before_frida_import_or_device_work(self):
+        # An import guard catches regression before any real Frida/device action.
+        original_import = builtins.__import__
+        def guarded_import(name, *args, **kwargs):
+            if name == "frida":
+                self.fail("Frida import reached before public CA validation")
+            return original_import(name, *args, **kwargs)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ca = root / "input.pem"
+            ca.write_text("-----BEGIN CERTIFICATE-----\nYWJj\n-----END CERTIFICATE-----")
+            (root / "frida-java-bridge.js").write_text("// bridge")
+            (root / "scope-engine.js").write_text("// engine")
+            argv = ["frida_worker", "--serial", "synthetic", "--package", "app.test",
+                    "--ca", str(ca), "--scripts", str(root), "--profile", "proxy"]
+            with mock.patch.object(WORKER.sys, "argv", argv), mock.patch("builtins.__import__", side_effect=guarded_import):
+                with self.assertRaisesRegex(ValueError, "Scope CA"):
+                    WORKER.main()
 
     def test_ready_gate_requires_engine_exact_profiles_and_real_capabilities(self):
         self.assertTrue(hasattr(WORKER, "validate_ready"), "worker validates installed capabilities")

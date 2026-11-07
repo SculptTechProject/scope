@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import re
 import signal
+import ssl
 import sys
 import threading
 import time
@@ -38,11 +39,25 @@ def build_script(root, ca, port, profiles):
     profiles = normalize_profiles(profiles)
     if type(port) is not int or not 1 <= port <= 65535:
         raise ValueError("A valid proxy port is required")
-    if ca.stat().st_size > 65536:
-        raise ValueError("Scope CA PEM is too large")
-    cert = ca.read_text(encoding="utf-8").strip()
-    if len(cert) > 65536 or not re.fullmatch(r"-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----", cert, flags=re.ASCII):
-        raise ValueError("Scope CA must be a public PEM certificate")
+    try:
+        # Bound the read itself, including files that grow after opening.
+        with ca.open("rb") as stream:
+            data = stream.read(65537)
+        if len(data) > 65536:
+            raise ValueError("oversized CA")
+        cert = data.decode("ascii").strip()
+        if not re.fullmatch(r"-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----", cert, flags=re.ASCII):
+            raise ValueError("invalid PEM")
+        der = ssl.PEM_cert_to_DER_cert(cert)
+        # Fresh context with no system roots: enumerate only this public CA.
+        # PEM decoding alone also accepts relabelled keys and trailing DER.
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.load_verify_locations(cadata=cert)
+        anchors = context.get_ca_certs(binary_form=True)
+        if len(anchors) != 1 or anchors[0] != der:
+            raise ValueError("incomplete or non-CA certificate")
+    except (OSError, UnicodeError, ValueError, ssl.SSLError):
+        raise ValueError("Scope CA must be one valid complete public PEM CA certificate, at most 64 KiB") from None
     config = {"caPem": cert, "proxyHost": "127.0.0.1", "proxyPort": port, "profiles": profiles}
     return "\n".join([
         (root / "frida-java-bridge.js").read_text(encoding="utf-8"),
